@@ -68,35 +68,57 @@ function App() {
     }
   }, []);
 
-  // 2. Loop Pendeteksi Wajah Lokal (Berjalan setiap 1 detik)
+  // 2. Loop Pendeteksi Wajah Lokal
   useEffect(() => {
     let interval;
     if (modelsLoaded && isScanning) {
       interval = setInterval(async () => {
-        // Pastikan video sudah menyala
         if (webcamRef.current && webcamRef.current.video.readyState === 4) {
           const video = webcamRef.current.video;
           
-          // AI Lokal mengecek layar: "Ada wajah nggak ya?"
+          // AI Lokal mendeteksi wajah
           const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
           
           if (detection) {
-            // JIKA ADA WAJAH:
-            console.log("Wajah terdeteksi oleh browser! Akurasi:", detection.score);
-            
-            // 1. Hentikan loop pencarian agar tidak dobel
+            console.log("Wajah ditemukan! Bersiap memotong gambar...");
             setIsScanning(false); 
             clearInterval(interval);
             
-            // 2. Jepret foto dan kirim ke Flask
-            const imageSrc = webcamRef.current.getScreenshot();
-            if (imageSrc) sendToFlask(imageSrc);
-          } else {
-            // JIKA TIDAK ADA WAJAH: Diam saja, server Flask aman dari spam.
-            console.log("Tidak ada wajah, server istirahat...");
+            // --- PROSES CROPPING (GUNTING VIRTUAL) ---
+            const { x, y, width, height } = detection.box;
+            
+            // 1. Buat ukuran potongan menjadi KOTAK (Square) agar sesuai target_size=(160,160) di Flask
+            const size = Math.max(width, height);
+            
+            // 2. Tambahkan margin 30% agar wajah tidak terpotong terlalu ketat (rambut dan dagu masuk)
+            const margin = size * 0.3;
+            const cropSize = size + (margin * 2);
+            
+            // 3. Tentukan titik potong (koordinat sudut kiri atas)
+            const cropX = Math.max(0, x + (width / 2) - (cropSize / 2));
+            const cropY = Math.max(0, y + (height / 2) - (cropSize / 2));
+
+            // 4. Siapkan Canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = cropSize;
+            canvas.height = cropSize;
+            const ctx = canvas.getContext('2d');
+            
+            // 5. Gunting video dan tempel ke Canvas
+            ctx.drawImage(
+              video, 
+              cropX, cropY, cropSize, cropSize, // Sumber dari video
+              0, 0, cropSize, cropSize          // Tujuan di canvas
+            );
+            
+            // 6. Ubah hasil potongan ke format JPEG kualitas tinggi
+            const croppedImageSrc = canvas.toDataURL('image/jpeg', 1.0);
+            
+            // Kirim gambar yang SUDAH DIPOTONG KOTAK ke Flask
+            sendToFlask(croppedImageSrc);
           }
         }
-      }, 1000); // Mengecek setiap 1000ms (1 detik)
+      }, 1000);
     }
     
     return () => clearInterval(interval);
