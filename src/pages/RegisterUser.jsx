@@ -94,8 +94,8 @@ const RegisterUser = () => {
     };
 
     return (
-        <div className="p-8 w-full bg-gray-50 min-h-screen">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">📸 Registrasi Wajah ASN Baru</h1>
+        <div className="p-8 w-full h-full">
+            <h1 className="text-2xl font-bold text-gray-800 mb-6">Registrasi Wajah ASN Baru</h1>
             
             <div className="bg-white p-6 rounded-xl shadow-sm max-w-2xl">
                 <div className="flex flex-col gap-4 mb-6">

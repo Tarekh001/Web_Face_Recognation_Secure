@@ -141,36 +141,62 @@ function FaceScan() {
   }, [modelsLoaded, isScanning, sendToFlask]);
 
   return (
-    <div className="container">
-      <h2>Presensi Cerdas Diskominfo</h2>
-      <p className="status-text">{status}</p>
+    // Background layar penuh mode gelap
+    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 font-sans relative">
+      
+      {/* Header Aplikasi */}
+      <div className="absolute top-8 left-0 right-0 text-center z-10">
+        <h2 className="text-3xl font-extrabold text-white tracking-wider mb-2 drop-shadow-md">
+          PRESENSI CERDAS <span className="text-blue-500">DISKOMINFO</span>
+        </h2>
+        <p className={`text-lg font-medium px-6 py-2 rounded-full inline-block shadow-sm ${
+          status.includes("Berhasil") || status.includes("✅") ? "bg-green-500/20 text-green-300" :
+          status.includes("❌") || status.includes("⛔") ? "bg-red-500/20 text-red-300" :
+          "bg-blue-500/20 text-blue-300 animate-pulse"
+        }`}>
+          {status}
+        </p>
+      </div>
 
-      <div className="camera-wrapper">
+      {/* Wadah Kamera (Camera Wrapper) */}
+      <div className="relative w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border-4 border-gray-800 bg-black mt-16">
         <Webcam
           audio={false}
           ref={webcamRef}
-          // 1. Paksa kualitas JPEG menjadi 100% (defaultnya 0.92)
           screenshotQuality={1} 
-          // 2. Gunakan format yang paling disukai AI
           screenshotFormat="image/jpeg"
-          // 3. Paksa resolusi HD (720p) agar tidak buram
           videoConstraints={{ 
             width: 1280, 
             height: 720, 
             facingMode: "user" 
           }}
-          className="webcam-video"
+          className="w-full h-auto object-cover transform scale-x-[-1]" // scale-x-[-1] efek cermin (mirror)
         />
-        <div className="face-guide"></div>
+        
+        {/* Face Guide (Kotak Panduan Wajah) */}
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 md:w-80 md:h-80 border-4 border-dashed border-blue-500/70 rounded-2xl bg-blue-500/10 pointer-events-none flex items-center justify-center">
+          {/* Efek sudut kamera pemindai */}
+          <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-400"></div>
+          <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-400"></div>
+          <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-400"></div>
+          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-400"></div>
+        </div>
       </div>
 
+      {/* Kartu Hasil (Result Card) - Muncul Pop-up dari bawah */}
       {result && (
-        <div className="result-card">
-          <h3>Data Cocok!</h3>
-          <p className="name">{result.name}</p>
-          <p className="nip">NIP: {result.nip}</p>
+        <div className="absolute bottom-12 bg-green-500 text-white px-10 py-5 rounded-2xl shadow-xl transform transition-all animate-bounce flex flex-col items-center">
+          <h3 className="text-xl font-bold mb-1">Data Cocok!</h3>
+          <p className="text-2xl font-extrabold uppercase tracking-wide">{result.name}</p>
+          <p className="text-green-100 font-medium tracking-widest mt-1">{result.nip}</p>
         </div>
       )}
+      
+      {/* Tombol Login Admin (Pojok Kanan Bawah) */}
+      <a href="/login" className="absolute bottom-6 right-6 text-gray-500 hover:text-white text-sm font-medium transition flex items-center gap-2 bg-gray-800/50 px-4 py-2 rounded-lg">
+        🔒 Login Admin
+      </a>
+
     </div>
   );
 }
