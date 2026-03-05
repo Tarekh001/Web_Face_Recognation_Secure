@@ -1,5 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle } from 'lucide-react';
+import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users } from 'lucide-react';
+
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const Navbar = () => {
 
   const navItems = [
     { path: '/dashboard', label: 'Report Dashboard', icon: <LayoutDashboard size={20} className='text-white' /> },
+    { path: '/manage-asn', label: 'Daftar ASN', icon: <Users size={20} /> },
     { path: '/register', label: 'Add new ASN', icon: <UserPlus size={20} className='text-white' /> },
     { path: '/', label: 'Presensi ASN', icon: <ScanFace size={20} className='text-white' /> },
   ];

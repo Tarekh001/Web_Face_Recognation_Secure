@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import RegisterUser from './pages/RegisterUser';
 import Navbar from './components/NavBar';
+import ManageASN from './pages/ManageASN';
 
 // Komponen Pelindung: Hanya admin yang punya token yang bisa lewat
 const ProtectedRoute = ({ children }) => {
@@ -41,6 +42,17 @@ function App() {
               <Navbar />
               <div className="flex-1 h-full overflow-y-auto">
                 <RegisterUser />
+              </div>
+            </div>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/manage-asn" element={
+          <ProtectedRoute>
+            <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
+              <Navbar />
+              <div className="flex-1 h-full overflow-y-auto">
+                <ManageASN />
               </div>
             </div>
           </ProtectedRoute>
