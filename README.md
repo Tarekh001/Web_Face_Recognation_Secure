@@ -1,25 +1,41 @@
-# React + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
 # Web_Face_Recognation_Secure
 
-### Hal - hal yang akan dibuat untuk website ini yaitu : 
+# Smart Presensi - Face Recognition AI Secure
 
-- Membuat database beserta backend untuk admin
+Sistem informasi presensi cerdas terintegrasi untuk Aparatur Sipil Negara (ASN). Proyek ini memanfaatkan teknologi kecerdasan buatan (FaceNet) untuk pengenalan wajah biometrik, arsitektur microservices ringan, dan isolasi data multi-instansi.
 
-- Login Admin dan Super Admin (untuk CRUD)
+## Arsitektur Sistem
 
-- Membuat report para ASN yang tercapture (untuk menyimpan kapan dia masuk dan keluar)
+Sistem ini terbagi menjadi empat pilar utama yang saling berkomunikasi melalui RESTful API.
+
+### 1. Backend (Python / Flask)
+Berperan sebagai otak komputasi dan gerbang keamanan utama.
+* Framework: Flask dengan Flask-SQLAlchemy & Flask-CORS.
+* Keamanan: Autentikasi berbasis JSON Web Token (JWT) dengan Role-Based Access Control (RBAC).
+* AI Module: Pemrosesan embedding wajah menggunakan model FaceNet lokal.
+* Sinkronisasi: Skrip mandiri (`sync_data.py`) untuk memigrasikan data legacy ke database utama.
+
+### 2. Database (Relational SQL)
+Pusat penyimpanan data transaksional dan master data.
+* Master Data: Menyimpan referensi Organisasi Perangkat Daerah (OPD), daftar ASN, dan mesin pemindai fisik.
+* Transaksional: Tabel presensi yang dipartisi berdasarkan bulan untuk menjaga performa kueri pada data berskala besar.
+* Audit Trail: Pencatatan riwayat aktivitas administratif (CRUD) secara ketat.
+
+### 3. Frontend Web (React / Vite)
+Antarmuka administratif berbasis web untuk pengelola sistem.
+* Styling: Tailwind CSS untuk desain responsif dan modern.
+* Pendaftaran Biometrik: Antarmuka `RegisterUser` dengan Guided UI (Face Overlay & Visual Checklist) yang menggunakan `@vladmandic/face-api` untuk deteksi wajah klien.
+* Dashboard Admin: Tabel pelaporan dinamis dengan fitur pencarian, filter, dan ekspor CSV.
+
+### 4. Mobile App (Flutter) - [Dalam Pengembangan]
+Aplikasi pendamping untuk ASN di lapangan.
+* Liveness Detection: Mengintegrasikan Google ML Kit (Native Android/iOS) untuk mencegah spoofing wajah (misal: deteksi kedipan).
+* Integrasi Kamera: Pengambilan gambar presisi yang dikirimkan langsung ke endpoint Flask melalui HTTP Multipart Request.
+
+## Alur Kerja Utama (Workflow)
+
+1. Pendaftaran: Admin mendaftarkan data NIP dan menangkap 5 sampel wajah ASN melalui Web.
+2. Ekstraksi Fitur: Flask memproses foto, menghasilkan file embedding (.pkl), dan menyimpannya di server.
+3. Presensi: ASN memindai wajah melalui Web Kamera atau Aplikasi Mobile.
+4. Validasi: Sistem memverifikasi Liveness (khusus mobile), mengekstrak embedding wajah baru, dan membandingkannya dengan database menggunakan jarak Euclidean (Threshold).
+5. Pencatatan: Jika wajah cocok dan ASN berada di OPD yang sesuai, sistem mencatat waktu absensi berdasarkan aturan jam kerja.
