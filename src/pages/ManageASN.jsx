@@ -131,6 +131,7 @@ const ManageASN = () => {
                 <th className="px-6 py-4 w-20 text-center">Profil</th>
                 <th className="px-6 py-4">NIP</th>
                 <th className="px-6 py-4">Nama Lengkap</th>
+                <th className="px-6 py-4">Instansi (OPD)</th> {/* <--- TAMBAH INI */}
                 <th className="px-6 py-4">Status Hari Ini</th>
                 <th className="px-6 py-4 text-center">Aksi</th>
               </tr>
@@ -151,6 +152,7 @@ const ManageASN = () => {
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-800">{asn.nip}</td>
                     <td className="px-6 py-4 font-semibold">{asn.nama}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{asn.opd}</td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center w-max gap-1.5 ${
                         asn.status_hari_ini === 'Sudah Hadir' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 

@@ -10,7 +10,7 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-    e.preventDefault(); // Mencegah halaman refresh
+    e.preventDefault(); 
     setIsLoading(true);
     setErrorMsg('');
 
@@ -20,10 +20,15 @@ const Login = () => {
         password: password
       });
 
-      // 1. Jika berhasil, simpan Kunci Token ke memori browser
+      // 1. Simpan Kunci Token ke memori browser
       localStorage.setItem('access_token', response.data.access_token);
       
-      // 2. Arahkan paksa masuk ke dalam Dashboard
+      // 2. TAMBAHAN: Simpan Role dan NIP (Username) untuk mengunci Sidebar
+      localStorage.setItem('user_role', response.data.user.role);
+      // Kita pakai NIP karena username login kita diset menggunakan email/NIP
+      localStorage.setItem('user_nip', response.data.user.nip || username); 
+      
+      // 3. Arahkan paksa masuk ke dalam Dashboard
       navigate('/dashboard');
       
     } catch (error) {

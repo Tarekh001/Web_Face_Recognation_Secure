@@ -150,18 +150,13 @@ const Dashboard = () => {
           <thead className="bg-[#e9ecef] text-gray-700 text-sm font-semibold">
             <tr>
               <th className="px-6 py-4">NIP</th>
-              <th 
-                className="px-6 py-4 cursor-pointer hover:bg-gray-300 transition"
-                onClick={() => handleSort('nama')}
-              >
+              <th className="px-6 py-4 cursor-pointer hover:bg-gray-300 transition"onClick={() => handleSort('nama')}>
                 <div className="flex items-center gap-2">Nama ASN <ArrowUpDown size={14} /></div>
               </th>
-              <th 
-                className="px-6 py-4 cursor-pointer hover:bg-gray-300 transition"
-                onClick={() => handleSort('waktu')}
-              >
+              <th className="px-6 py-4 cursor-pointer hover:bg-gray-300 transition"onClick={() => handleSort('waktu')}>
                 <div className="flex items-center gap-2">Tanggal Absensi <ArrowUpDown size={14} /></div>
               </th>
+              <th className="px-6 py-4">Instansi (OPD)</th>
               <th className="px-6 py-4">Waktu Absensi</th>
               <th className="px-6 py-4">Status</th>
             </tr>
@@ -176,6 +171,7 @@ const Dashboard = () => {
                     <td className="px-6 py-4 font-medium text-gray-800">{log.nip}</td>
                     <td className="px-6 py-4">{log.nama}</td>
                     <td className="px-6 py-4">{tanggal}</td>
+                    <td className="px-6 py-4 border-b text-sm text-gray-600">{log.opd}</td>
                     <td className="px-6 py-4">{jam}</td>
                     <td className="px-6 py-4">
                       <span className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wide ${

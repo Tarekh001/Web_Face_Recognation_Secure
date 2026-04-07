@@ -5,11 +5,23 @@ import Dashboard from './pages/Dashboard';
 import RegisterUser from './pages/RegisterUser';
 import Navbar from './components/NavBar';
 import ManageASN from './pages/ManageASN';
+import MasterData from './pages/MasterData'; // Kita akan buat file ini selanjutnya
 
-// Komponen Pelindung: Hanya admin yang punya token yang bisa lewat
+// Komponen Pelindung Standar: Harus punya token
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
   return token ? children : <Navigate to="/login" />;
+};
+
+// Komponen Pelindung Khusus: Harus Super Admin
+const SuperAdminRoute = ({ children }) => {
+  const token = localStorage.getItem('access_token');
+  const role = localStorage.getItem('user_role');
+  
+  if (!token) return <Navigate to="/login" />;
+  if (role !== 'super_admin') return <Navigate to="/dashboard" replace />; // Usir ke dashboard
+  
+  return children;
 };
 
 function App() {
@@ -25,10 +37,8 @@ function App() {
         {/* Jalur Privat: Dashboard Admin & Registrasi */}
         <Route path="/dashboard" element={
           <ProtectedRoute>
-            {/* Kunci tampilan di sini: h-screen dan w-full */}
             <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
               <Navbar /> 
-              {/* flex-1 akan membuat area ini mengisi seluruh sisa layar di sebelah kanan Navbar */}
               <div className="flex-1 h-full overflow-y-auto">
                 <Dashboard />
               </div>
@@ -56,6 +66,18 @@ function App() {
               </div>
             </div>
           </ProtectedRoute>
+        } />
+
+        {/* JALUR SUPER ADMIN KHUSUS: MASTER DATA */}
+        <Route path="/master-data" element={
+          <SuperAdminRoute>
+            <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
+              <Navbar />
+              <div className="flex-1 h-full overflow-y-auto">
+                <MasterData />
+              </div>
+            </div>
+          </SuperAdminRoute>
         } />
       </Routes>
     </Router>
