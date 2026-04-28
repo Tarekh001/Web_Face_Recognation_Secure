@@ -7,7 +7,7 @@ import { CheckCircle2, Circle, Camera, Save, User } from 'lucide-react';
 const RegisterUser = () => {
     const webcamRef = useRef(null);
     const [capturedPhotos, setCapturedPhotos] = useState([]);
-    const [formData, setFormData] = useState({ nip: '', nama: '' });
+    const [formData, setFormData] = useState({ nip: '', nama: '', opd_id: '' });
     const [opdList, setOpdList] = useState([]); // State untuk daftar OPD
     const [isModelsLoaded, setIsModelsLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +39,22 @@ const RegisterUser = () => {
         };
         fetchOPD();
     }, []);
+    
+    useEffect(() => {
+        const loadModels = async () => {
+            try {
+                // Pastikan file model Anda benar-benar ada di folder public/models/
+                await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+                setIsModelsLoaded(true);
+            } catch (error) {
+                console.error("Gagal memuat model Face API:", error);
+                alert("Gagal memuat modul kamera. Pastikan folder model tersedia.");
+            }
+        };
+        
+        loadModels();
+    }, []);
+
 
     const captureAndCrop = async () => {
         if (capturedPhotos.length >= 5) return;
@@ -83,6 +99,7 @@ const RegisterUser = () => {
         data.append('nip', formData.nip);
         data.append('name', formData.nama);
         data.append('opd_id', formData.opd_id);
+        data.append('source', 'web');
         
         capturedPhotos.forEach((blob, i) => data.append('photos', blob, `face_${i}.jpg`));
 
@@ -122,7 +139,7 @@ const RegisterUser = () => {
                             <div>
                                 <label className="block text-sm font-semibold text-gray-600 mb-1">Pilih Instansi (OPD)</label>
                                 <select 
-                                    value={formData.opd_id}
+                                    value={formData.opd_id || ""}
                                     onChange={e => setFormData({...formData, opd_id: e.target.value})}
                                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition bg-white"
                                 >
@@ -231,19 +248,19 @@ const RegisterUser = () => {
 
                         <button 
                             onClick={captureAndCrop} 
-                            disabled={!isModelsLoaded || currentPoseIndex >= 5 || !formData.nip || !formData.nama}
+                            disabled={!isModelsLoaded || currentPoseIndex >= 5 || !formData.nip || !formData.nama || !formData.opd_id}
                             className={`px-10 py-4 rounded-full font-extrabold text-lg transition shadow-lg ${
                                 currentPoseIndex >= 5 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
-                                (!formData.nip || !formData.nama) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
+                                (!formData.nip || !formData.nama || !formData.opd_id) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' :
                                 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 active:scale-95'
                             }`}
                         >
                             📸 Jepret Pose {currentPoseIndex < 5 ? currentPoseIndex + 1 : 5} / 5
                         </button>
 
-                        {(!formData.nip || !formData.nama) && currentPoseIndex < 5 && (
+                        {(!formData.nip || !formData.nama || !formData.opd_id) && currentPoseIndex < 5 && (
                             <p className="text-red-500 text-sm mt-3 font-medium">
-                                *Isi NIP dan Nama di sebelah kiri terlebih dahulu untuk mengaktifkan kamera.
+                                *Isi Instansi, NIP, dan Nama di sebelah kiri terlebih dahulu untuk mengaktifkan kamera.
                             </p>
                         )}
                     </div>
