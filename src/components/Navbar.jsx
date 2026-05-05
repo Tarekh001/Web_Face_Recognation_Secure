@@ -1,36 +1,44 @@
+import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database } from 'lucide-react'; // Tambah icon Database
+import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History } from 'lucide-react';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [masterDataOpen, setMasterDataOpen] = useState(
+    location.pathname.startsWith('/master-data')
+  );
 
   // AMBIL DATA DARI LOCAL STORAGE
   const userRole = localStorage.getItem('user_role');
-  const userNip = localStorage.getItem('user_nip') || 'Admin Instansi';
+  const userNip = localStorage.getItem('user_username') || localStorage.getItem('user_nip') || 'Admin Instansi';
 
   const handleLogout = () => {
     // Bersihkan semua jejak saat logout
     localStorage.removeItem('access_token');
     localStorage.removeItem('user_role');
     localStorage.removeItem('user_nip');
+    localStorage.removeItem('user_username');
     navigate('/login');
   };
 
   // Menu Standar (Bisa diakses Super Admin & Admin OPD)
   const navItems = [
-    { path: '/dashboard', label: 'Report Dashboard', icon: <LayoutDashboard size={20} className='text-white' /> },
-    { path: '/manage-asn', label: 'Daftar ASN', icon: <Users size={20} className='text-white' /> },
-    { path: '/register', label: 'Add new ASN', icon: <UserPlus size={20} className='text-white' /> }
+    { path: '/dashboard', label: 'Report Dashboard', icon: <LayoutDashboard size={20} /> },
+    { path: '/manage-asn', label: 'Daftar ASN', icon: <Users size={20} /> },
+    { path: '/register', label: 'Add new ASN', icon: <UserPlus size={20} /> }
   ];
 
-  // KONDISI RBAC: Hanya masukkan menu Master Data jika yang login Super Admin
-  if (userRole === 'super_admin') {
-    navItems.push({ path: '/master-data', label: 'Master Data Sistem', icon: <Database size={20} className='text-white' /> });
-  }
+  // Sub-menu Master Data (hanya Super Admin)
+  const masterDataItems = [
+    { path: '/master-data/opd', label: 'Data OPD', icon: <Building2 size={16} /> },
+    { path: '/master-data/admin', label: 'Data Admin', icon: <UserCog size={16} /> },
+    { path: '/master-data/devices', label: 'Data Perangkat', icon: <MonitorSmartphone size={16} /> },
+    { path: '/audit-trail', label: 'Audit Trail', icon: <History size={16} /> },
+  ];
 
-  // Menu Publik ditaruh paling bawah
-  navItems.push({ path: '/', label: 'Presensi ASN', icon: <ScanFace size={20} className='text-white' /> });
+  const isActiveRoute = (path) => location.pathname === path;
+  const isMasterDataActive = location.pathname.startsWith('/master-data') || location.pathname === '/audit-trail';
 
   return (
     <nav className="bg-[#0057A4] text-white w-72 min-h-screen flex flex-col shadow-xl">
@@ -53,7 +61,7 @@ const Navbar = () => {
           <Link
             key={item.path}
             to={item.path}
-            className={`text-[#f5f5f5] text-xs flex items-start gap-4 px-8 py-4 font-semibold transition ${location.pathname === item.path
+            className={`text-[#f5f5f5] text-xs flex items-center gap-4 px-8 py-4 font-semibold transition ${isActiveRoute(item.path)
                 ? 'bg-[#0074BA] border-l-4 border-white'
                 : 'hover:bg-[#0074BA] border-l-4 border-transparent'
               }`}
@@ -62,6 +70,59 @@ const Navbar = () => {
             {item.label}
           </Link>
         ))}
+
+        {/* MASTER DATA DROPDOWN — hanya Super Admin */}
+        {userRole === 'super_admin' && (
+          <div>
+            {/* Dropdown Toggle */}
+            <button
+              onClick={() => setMasterDataOpen(!masterDataOpen)}
+              className={`w-full text-[#f5f5f5] text-xs flex items-center gap-4 px-8 py-4 font-semibold transition ${
+                isMasterDataActive
+                  ? 'bg-[#0074BA] border-l-4 border-white'
+                  : 'hover:bg-[#0074BA] border-l-4 border-transparent'
+              }`}
+            >
+              <Database size={20} />
+              <span className="flex-1 text-left">Master Data</span>
+              <ChevronDown
+                size={16}
+                className={`transition-transform duration-200 ${masterDataOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {/* Sub-menus */}
+            <div className={`overflow-hidden transition-all duration-200 ${masterDataOpen ? 'max-h-60' : 'max-h-0'}`}>
+              {masterDataItems.map((sub) => (
+                <Link
+                  key={sub.path}
+                  to={sub.path}
+                  className={`text-[#d0e8ff] text-[11px] flex items-center gap-3 pl-16 pr-8 py-3 font-medium transition ${
+                    isActiveRoute(sub.path)
+                      ? 'bg-[#005fa8] text-white font-bold'
+                      : 'hover:bg-[#005fa8] hover:text-white'
+                  }`}
+                >
+                  {sub.icon}
+                  {sub.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+
+        {/* Presensi ASN — paling bawah */}
+        <Link
+          to="/"
+          className={`text-[#f5f5f5] text-xs flex items-center gap-4 px-8 py-4 font-semibold transition ${isActiveRoute('/')
+              ? 'bg-[#0074BA] border-l-4 border-white'
+              : 'hover:bg-[#0074BA] border-l-4 border-transparent'
+            }`}
+        >
+          <ScanFace size={20} />
+          Presensi ASN
+        </Link>
       </div>
 
       {/* Logout */}

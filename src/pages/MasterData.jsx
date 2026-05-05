@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Building2, MonitorSmartphone, UserCog, History, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X } from 'lucide-react';
 
-const MasterData = () => {
-  const [activeTab, setActiveTab] = useState('opd');
+const MasterData = ({ defaultTab }) => {
+  const [activeTab, setActiveTab] = useState(defaultTab || 'opd');
   const [opds, setOpds] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [devices, setDevices] = useState([]);
@@ -13,7 +13,7 @@ const MasterData = () => {
   // Form States
   const [formOpd, setFormOpd] = useState({ nama_opd: '', kode_opd: '' });
   const [formAdmin, setFormAdmin] = useState({ nip: '', nama: '', password: '', opd_id: '' });
-  const [formDevice, setFormDevice] = useState({ sn: '', name: '', opd_id: '', nama_lokasi: '' });
+  // Device form dihapus — device hanya bisa ditambah via Mobile Kiosk Activation
 
   // Edit Modal States
   const [editModal, setEditModal] = useState(null); // { type: 'opd'|'admin'|'device', data: {...} }
@@ -69,18 +69,7 @@ const MasterData = () => {
     } finally { setIsLoading(false); }
   };
 
-  const handleAddDevice = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      await axios.post('http://127.0.0.1:5000/api/devices', formDevice, { headers });
-      alert("Mesin Berhasil Didaftarkan!");
-      setFormDevice({ sn: '', name: '', opd_id: '', nama_lokasi: '' });
-      fetchData();
-    } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.message || "Gagal mendaftarkan mesin");
-    } finally { setIsLoading(false); }
-  };
+  // handleAddDevice dihapus — device otomatis terdaftar via Mobile Kiosk Binding
 
   // --- UPDATE Handlers ---
   const handleUpdate = async () => {
@@ -214,13 +203,14 @@ const MasterData = () => {
             </div>
             <div className="md:col-span-2">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-gray-100"><th className="p-3 border-b">NIP/Username</th><th className="p-3 border-b">Nama Admin</th><th className="p-3 border-b">Wilayah Instansi</th><th className="p-3 border-b text-center w-24">Aksi</th></tr></thead>
+                <thead><tr className="bg-gray-100"><th className="p-3 border-b">NIP/Username</th><th className="p-3 border-b">Nama Admin</th><th className="p-3 border-b">Wilayah Instansi</th><th className="p-3 border-b">Bound Device</th><th className="p-3 border-b text-center w-24">Aksi</th></tr></thead>
                 <tbody>
                   {admins.map(a => (
                     <tr key={a.id} className="border-b hover:bg-gray-50">
                       <td className="p-3 font-medium">{a.nip}</td>
                       <td className="p-3">{a.nama}</td>
                       <td className="p-3 text-blue-600 font-semibold">{a.opd}</td>
+                      <td className="p-3">{a.bound_device_sn ? <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full font-mono">{a.bound_device_sn}</span> : <span className="text-gray-400 text-xs">Belum terikat</span>}</td>
                       <td className="p-3 text-center">
                         <div className="flex justify-center gap-1">
                           <button onClick={() => setEditModal({ type: 'admin', data: { id: a.id, nip: a.nip, nama: a.nama, opd_id: opds.find(o => o.nama === a.opd)?.id || '', password: '' } })} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Pencil size={15} /></button>
@@ -238,26 +228,13 @@ const MasterData = () => {
         {/* ============ TAB 3: DEVICE (MESIN) ============ */}
         {activeTab === 'device' && (
           <div className="space-y-6">
-            {/* --- FORM REGISTRASI DEVICE --- */}
-            <div className="bg-gray-50 p-5 rounded-lg border">
-              <h3 className="font-bold text-gray-700 mb-2">Daftarkan Mesin Kios Baru</h3>
-              <p className="text-xs text-gray-400 mb-4 flex items-center gap-1.5">
-                <Wifi size={13} /> IP Address, MAC Address, dan Platform akan <b>otomatis terisi</b> saat perangkat pertama kali terhubung ke server (Heartbeat).
-              </p>
-              <form onSubmit={handleAddDevice} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input type="text" placeholder="Serial Number (SN) *" required value={formDevice.sn} onChange={e => setFormDevice({...formDevice, sn: e.target.value})} className="p-2 border rounded" />
-                <input type="text" placeholder="Nama Device (Ex: Kios Absen Diskominfo)" value={formDevice.name} onChange={e => setFormDevice({...formDevice, name: e.target.value})} className="p-2 border rounded" />
-                <input type="text" placeholder="Lokasi Penempatan (Ex: Lobi Lantai 1) *" required value={formDevice.nama_lokasi} onChange={e => setFormDevice({...formDevice, nama_lokasi: e.target.value})} className="p-2 border rounded" />
-                <select required value={formDevice.opd_id} onChange={e => setFormDevice({...formDevice, opd_id: e.target.value})} className="p-2 border rounded">
-                  <option value="" disabled>Alokasikan ke Instansi *</option>
-                  {opds.map(o => <option key={o.id} value={o.id}>{o.nama}</option>)}
-                </select>
-                <div className="md:col-span-2">
-                  <button type="submit" disabled={isLoading} className="w-full bg-blue-600 text-white font-bold p-2.5 rounded-lg hover:bg-blue-700 transition">
-                    {isLoading ? 'Mendaftarkan...' : 'Daftarkan Mesin'}
-                  </button>
-                </div>
-              </form>
+            {/* Info Banner — Device hanya bisa ditambah via Kiosk */}
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-start gap-3">
+              <MonitorSmartphone size={20} className="text-blue-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Perangkat terdaftar otomatis</p>
+                <p className="text-xs text-blue-600 mt-1">Perangkat baru hanya bisa didaftarkan melalui proses <b>Aktivasi Kiosk</b> di aplikasi mobile. Admin login di perangkat → perangkat otomatis terikat ke instansi.</p>
+              </div>
             </div>
 
             {/* --- TABEL DAFTAR DEVICE --- */}
@@ -271,6 +248,7 @@ const MasterData = () => {
                     <th className="p-3 border-b">Platform</th>
                     <th className="p-3 border-b">Lokasi</th>
                     <th className="p-3 border-b">Instansi</th>
+                    <th className="p-3 border-b">Didaftarkan Oleh</th>
                     <th className="p-3 border-b">Status</th>
                     <th className="p-3 border-b">Terakhir Aktif</th>
                     <th className="p-3 border-b text-center">Transaksi</th>
@@ -297,6 +275,7 @@ const MasterData = () => {
                       </td>
                       <td className="p-3 text-gray-600">{d.lokasi}</td>
                       <td className="p-3 font-semibold text-gray-700">{d.opd}</td>
+                      <td className="p-3">{d.registered_by_name ? <span className="text-xs font-medium text-gray-700">{d.registered_by_name}</span> : <span className="text-gray-400 text-xs">—</span>}</td>
                       <td className="p-3">
                         {d.verified ? (
                           <span className="flex items-center gap-1 text-green-600 font-semibold text-xs"><CheckCircle size={14} /> Verified</span>

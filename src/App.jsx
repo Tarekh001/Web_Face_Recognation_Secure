@@ -5,7 +5,10 @@ import Dashboard from './pages/Dashboard';
 import RegisterUser from './pages/RegisterUser';
 import Navbar from './components/NavBar';
 import ManageASN from './pages/ManageASN';
-import MasterData from './pages/MasterData'; // Kita akan buat file ini selanjutnya
+import OpdPage from './pages/OpdPage';
+import AdminPage from './pages/AdminPage';
+import DevicePage from './pages/DevicePage';
+import AuditPage from './pages/AuditPage';
 
 // Komponen Pelindung Standar: Harus punya token
 const ProtectedRoute = ({ children }) => {
@@ -17,68 +20,42 @@ const ProtectedRoute = ({ children }) => {
 const SuperAdminRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
   const role = localStorage.getItem('user_role');
-  
   if (!token) return <Navigate to="/login" />;
-  if (role !== 'super_admin') return <Navigate to="/dashboard" replace />; // Usir ke dashboard
-  
+  if (role !== 'super_admin') return <Navigate to="/dashboard" replace />;
   return children;
 };
+
+// Layout wrapper untuk halaman admin
+const AdminLayout = ({ children }) => (
+  <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
+    <Navbar />
+    <div className="flex-1 h-full overflow-y-auto">
+      {children}
+    </div>
+  </div>
+);
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Jalur Publik: Untuk ASN absen */}
+        {/* Jalur Publik */}
         <Route path="/" element={<FaceScan />} />
-        
-        {/* Jalur Login Admin */}
         <Route path="/login" element={<Login />} />
 
-        {/* Jalur Privat: Dashboard Admin & Registrasi */}
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
-              <Navbar /> 
-              <div className="flex-1 h-full overflow-y-auto">
-                <Dashboard />
-              </div>
-            </div>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/register" element={
-          <ProtectedRoute>
-            <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
-              <Navbar />
-              <div className="flex-1 h-full overflow-y-auto">
-                <RegisterUser />
-              </div>
-            </div>
-          </ProtectedRoute>
-        } />
+        {/* Jalur Privat: Admin OPD & Super Admin */}
+        <Route path="/dashboard" element={<ProtectedRoute><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>} />
+        <Route path="/register" element={<ProtectedRoute><AdminLayout><RegisterUser /></AdminLayout></ProtectedRoute>} />
+        <Route path="/manage-asn" element={<ProtectedRoute><AdminLayout><ManageASN /></AdminLayout></ProtectedRoute>} />
 
-        <Route path="/manage-asn" element={
-          <ProtectedRoute>
-            <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
-              <Navbar />
-              <div className="flex-1 h-full overflow-y-auto">
-                <ManageASN />
-              </div>
-            </div>
-          </ProtectedRoute>
-        } />
+        {/* Jalur Super Admin: Master Data — masing-masing komponen terpisah */}
+        <Route path="/master-data" element={<SuperAdminRoute><AdminLayout><OpdPage /></AdminLayout></SuperAdminRoute>} />
+        <Route path="/master-data/opd" element={<SuperAdminRoute><AdminLayout><OpdPage /></AdminLayout></SuperAdminRoute>} />
+        <Route path="/master-data/admin" element={<SuperAdminRoute><AdminLayout><AdminPage /></AdminLayout></SuperAdminRoute>} />
+        <Route path="/master-data/devices" element={<SuperAdminRoute><AdminLayout><DevicePage /></AdminLayout></SuperAdminRoute>} />
 
-        {/* JALUR SUPER ADMIN KHUSUS: MASTER DATA */}
-        <Route path="/master-data" element={
-          <SuperAdminRoute>
-            <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
-              <Navbar />
-              <div className="flex-1 h-full overflow-y-auto">
-                <MasterData />
-              </div>
-            </div>
-          </SuperAdminRoute>
-        } />
+        {/* Jalur Super Admin: Audit Trail */}
+        <Route path="/audit-trail" element={<SuperAdminRoute><AdminLayout><AuditPage /></AdminLayout></SuperAdminRoute>} />
       </Routes>
     </Router>
   );
