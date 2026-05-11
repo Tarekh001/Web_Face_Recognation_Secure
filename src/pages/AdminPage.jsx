@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { UserCog, Pencil, Trash2, X, Plus, Eye, EyeOff, ShieldCheck, Fingerprint } from 'lucide-react';
+import { UserCog, Pencil, Trash2, X, Plus, Eye, EyeOff, ShieldCheck, Fingerprint, Search } from 'lucide-react';
 
 const API = 'http://127.0.0.1:5000/api';
 
@@ -12,6 +12,17 @@ const AdminPage = () => {
   const [editModal, setEditModal] = useState(null);
   const [showPw, setShowPw] = useState(false);
   const [showEditPw, setShowEditPw] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredAdmins = useMemo(() => {
+    if (!searchQuery.trim()) return admins;
+    const q = searchQuery.toLowerCase();
+    return admins.filter(a =>
+      (a.nama || '').toLowerCase().includes(q) ||
+      (a.nip || '').toLowerCase().includes(q) ||
+      (a.username || '').toLowerCase().includes(q)
+    );
+  }, [admins, searchQuery]);
   const [form, setForm] = useState({ nip: '', username: '', nama_lengkap: '', password: '', opd_id: '' });
 
   const token = localStorage.getItem('access_token');
@@ -84,72 +95,70 @@ const AdminPage = () => {
         </button>
       </div>
 
-      {/* ── TABLE ── */}
+      {/* ── SEARCH + TABLE ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-gray-50 text-gray-600 text-sm">
-              <th className="p-4 border-b font-semibold w-12">#</th>
-              <th className="p-4 border-b font-semibold">NIP</th>
-              <th className="p-4 border-b font-semibold">Username</th>
-              <th className="p-4 border-b font-semibold">Nama Admin</th>
-              <th className="p-4 border-b font-semibold">Wilayah Instansi</th>
-              <th className="p-4 border-b font-semibold">Daftar Perangkat</th>
-              <th className="p-4 border-b font-semibold text-center w-28">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {admins.map((a, i) => (
-              <tr key={a.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
-                <td className="p-4 text-gray-400 text-sm">{i + 1}</td>
-                <td className="p-4">
-                  <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{a.nip || '—'}</span>
-                  {/* Face registration status */}
-                  {a.is_face_registered && (
-                    <span className="ml-1.5 inline-flex" title="Wajah terdaftar">
-                      <Fingerprint size={13} className="text-green-500" />
-                    </span>
-                  )}
-                </td>
-                <td className="p-4">
-                  <span className="text-sm text-gray-600">{a.username || <span className="text-gray-400 italic">—</span>}</span>
-                </td>
-                <td className="p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-800 font-medium">{a.nama}</span>
-                    {a.role === 'super_admin' && (
-                      <span className="flex items-center gap-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                        <ShieldCheck size={10} /> SA
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="p-4 text-blue-600 font-semibold text-sm">{a.opd}</td>
-                <td className="p-4">
-                  {a.bound_devices && a.bound_devices.length > 0
-                    ? <div className="flex flex-wrap gap-1">
-                        {a.bound_devices.map(sn => (
-                          <span key={sn} className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">{sn}</span>
-                        ))}
-                      </div>
-                    : <span className="text-gray-400 text-xs">Belum terikat</span>}
-                </td>
-                <td className="p-4 text-center">
-                  <div className="flex justify-center gap-1">
-                    {a.role !== 'super_admin' && (
-                      <>
-                        <button onClick={() => { setEditModal({ id: a.id, nip: a.nip, username: a.username, nama: a.nama, opd_id: a.opd_id || '', password: '' }); setShowEditPw(false); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
-                        <button onClick={() => handleDelete(a.id, a.nama)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus"><Trash2 size={15} /></button>
-                      </>
-                    )}
-                    {a.role === 'super_admin' && <span className="text-gray-300 text-xs">—</span>}
-                  </div>
-                </td>
+        {/* Search Bar */}
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input type="text" placeholder="Cari NIP, Username, atau Nama..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left min-w-[900px]">
+            <thead>
+              <tr className="bg-gray-50 text-gray-600 text-sm">
+                <th className="p-4 border-b font-semibold w-12">#</th>
+                <th className="p-4 border-b font-semibold whitespace-nowrap">NIP</th>
+                <th className="p-4 border-b font-semibold whitespace-nowrap">Username</th>
+                <th className="p-4 border-b font-semibold">Nama Admin</th>
+                <th className="p-4 border-b font-semibold">Wilayah Instansi</th>
+                <th className="p-4 border-b font-semibold">Daftar Perangkat</th>
+                <th className="p-4 border-b font-semibold text-center w-28 sticky right-0 bg-gray-50">Aksi</th>
               </tr>
-            ))}
-            {admins.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">Belum ada data Admin.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredAdmins.map((a, i) => (
+                <tr key={a.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
+                  <td className="p-4 text-gray-400 text-sm">{i + 1}</td>
+                  <td className="p-4 whitespace-nowrap">
+                    <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{a.nip || '—'}</span>
+                    {a.is_face_registered && <span className="ml-1.5 inline-flex" title="Wajah terdaftar"><Fingerprint size={13} className="text-green-500" /></span>}
+                  </td>
+                  <td className="p-4 whitespace-nowrap">
+                    <span className="text-sm text-gray-600">{a.username || <span className="text-gray-400 italic">—</span>}</span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-800 font-medium">{a.nama}</span>
+                      {a.role === 'super_admin' && <span className="flex items-center gap-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full"><ShieldCheck size={10} /> SA</span>}
+                    </div>
+                  </td>
+                  <td className="p-4 text-blue-600 font-semibold text-sm whitespace-nowrap">{a.opd}</td>
+                  <td className="p-4">
+                    {a.bound_devices && a.bound_devices.length > 0
+                      ? <div className="flex flex-wrap gap-1">{a.bound_devices.map(sn => <span key={sn} className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">{sn}</span>)}</div>
+                      : <span className="text-gray-400 text-xs">Belum terikat</span>}
+                  </td>
+                  <td className="p-4 text-center sticky right-0 bg-white">
+                    <div className="flex justify-center gap-1">
+                      {a.role !== 'super_admin' && (
+                        <>
+                          <button onClick={() => { setEditModal({ id: a.id, nip: a.nip, username: a.username, nama: a.nama, opd_id: a.opd_id || '', password: '' }); setShowEditPw(false); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
+                          <button onClick={() => handleDelete(a.id, a.nama)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus"><Trash2 size={15} /></button>
+                        </>
+                      )}
+                      {a.role === 'super_admin' && <span className="text-gray-300 text-xs">—</span>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredAdmins.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada data Admin.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ── ADD ADMIN MODAL ── */}

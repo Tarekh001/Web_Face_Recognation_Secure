@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History } from 'lucide-react';
+import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History, Settings } from 'lucide-react';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -39,6 +39,7 @@ const Navbar = () => {
 
   const isActiveRoute = (path) => location.pathname === path;
   const isMasterDataActive = location.pathname.startsWith('/master-data') || location.pathname === '/audit-trail';
+  const isSettingsActive = location.pathname === '/settings';
 
   return (
     <nav className="bg-[#0057A4] text-white w-72 min-h-screen flex flex-col shadow-xl">
@@ -109,6 +110,20 @@ const Navbar = () => {
               ))}
             </div>
           </div>
+        )}
+
+        {/* PENGATURAN SISTEM — hanya Super Admin */}
+        {userRole === 'super_admin' && (
+          <Link
+            to="/settings"
+            className={`text-[#f5f5f5] text-xs flex items-center gap-4 px-8 py-4 font-semibold transition ${isSettingsActive
+                ? 'bg-[#0074BA] border-l-4 border-white'
+                : 'hover:bg-[#0074BA] border-l-4 border-transparent'
+              }`}
+          >
+            <Settings size={20} />
+            Pengaturan Sistem
+          </Link>
         )}
 
 

@@ -9,6 +9,7 @@ import OpdPage from './pages/OpdPage';
 import AdminPage from './pages/AdminPage';
 import DevicePage from './pages/DevicePage';
 import AuditPage from './pages/AuditPage';
+import SettingsPage from './pages/SettingsPage';
 
 // Komponen Pelindung Standar: Harus punya token
 const ProtectedRoute = ({ children }) => {
@@ -56,6 +57,9 @@ function App() {
 
         {/* Jalur Super Admin: Audit Trail */}
         <Route path="/audit-trail" element={<SuperAdminRoute><AdminLayout><AuditPage /></AdminLayout></SuperAdminRoute>} />
+
+        {/* Jalur Super Admin: Pengaturan Sistem */}
+        <Route path="/settings" element={<SuperAdminRoute><AdminLayout><SettingsPage /></AdminLayout></SuperAdminRoute>} />
       </Routes>
     </Router>
   );

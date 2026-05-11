@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Building2, Pencil, Trash2, X, Plus } from 'lucide-react';
+import { Building2, Pencil, Trash2, X, Plus, Search } from 'lucide-react';
 
 const API = 'http://127.0.0.1:5000/api';
 
@@ -9,7 +9,14 @@ const OpdPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editModal, setEditModal] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [form, setForm] = useState({ nama_opd: '', kode_opd: '' });
+
+  const filteredOpds = useMemo(() => {
+    if (!searchQuery.trim()) return opds;
+    const q = searchQuery.toLowerCase();
+    return opds.filter(o => (o.nama || '').toLowerCase().includes(q) || (o.kode || '').toLowerCase().includes(q));
+  }, [opds, searchQuery]);
 
   const token = localStorage.getItem('access_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -76,32 +83,41 @@ const OpdPage = () => {
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-gray-50 text-gray-600 text-sm">
-              <th className="p-4 border-b font-semibold w-16">#</th>
-              <th className="p-4 border-b font-semibold">Kode OPD</th>
-              <th className="p-4 border-b font-semibold">Nama Instansi</th>
-              <th className="p-4 border-b font-semibold text-center w-28">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {opds.map((o, i) => (
-              <tr key={o.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
-                <td className="p-4 text-gray-400 text-sm">{i + 1}</td>
-                <td className="p-4 font-mono font-semibold text-sm text-gray-700">{o.kode}</td>
-                <td className="p-4 text-gray-800">{o.nama}</td>
-                <td className="p-4 text-center">
-                  <div className="flex justify-center gap-1">
-                    <button onClick={() => setEditModal({ id: o.id, nama: o.nama, kode: o.kode })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
-                    <button onClick={() => handleDelete(o.id, o.nama)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus"><Trash2 size={15} /></button>
-                  </div>
-                </td>
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input type="text" placeholder="Cari Kode atau Nama OPD..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gray-50 text-gray-600 text-sm">
+                <th className="p-4 border-b font-semibold w-16">#</th>
+                <th className="p-4 border-b font-semibold">Kode OPD</th>
+                <th className="p-4 border-b font-semibold">Nama Instansi</th>
+                <th className="p-4 border-b font-semibold text-center w-28">Aksi</th>
               </tr>
-            ))}
-            {opds.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-gray-400">Belum ada data OPD.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredOpds.map((o, i) => (
+                <tr key={o.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
+                  <td className="p-4 text-gray-400 text-sm">{i + 1}</td>
+                  <td className="p-4 font-mono font-semibold text-sm text-gray-700">{o.kode}</td>
+                  <td className="p-4 text-gray-800">{o.nama}</td>
+                  <td className="p-4 text-center">
+                    <div className="flex justify-center gap-1">
+                      <button onClick={() => setEditModal({ id: o.id, nama: o.nama, kode: o.kode })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
+                      <button onClick={() => handleDelete(o.id, o.nama)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredOpds.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada data OPD.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Add Modal */}

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { MonitorSmartphone, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X, Info, Unlink } from 'lucide-react';
+import { MonitorSmartphone, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X, Info, Unlink, Search } from 'lucide-react';
 
 const API = 'http://127.0.0.1:5000/api';
 
@@ -9,6 +9,18 @@ const DevicePage = () => {
   const [opds, setOpds] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [editModal, setEditModal] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredDevices = useMemo(() => {
+    if (!searchQuery.trim()) return devices;
+    const q = searchQuery.toLowerCase();
+    return devices.filter(d =>
+      (d.sn || '').toLowerCase().includes(q) ||
+      (d.lokasi || '').toLowerCase().includes(q) ||
+      (d.device_name || '').toLowerCase().includes(q) ||
+      (d.opd || '').toLowerCase().includes(q)
+    );
+  }, [devices, searchQuery]);
 
   const token = localStorage.getItem('access_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -77,57 +89,61 @@ const DevicePage = () => {
         <p className="text-xs text-blue-700">Perangkat didaftarkan otomatis saat Admin login di Kiosk Mobile. Gunakan <b>Unbind</b> untuk melepas perangkat dari instansi (perangkat perlu aktivasi ulang).</p>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-gray-600">
-              <th className="p-4 border-b font-semibold">SN Mesin</th>
-              <th className="p-4 border-b font-semibold">Instansi (OPD)</th>
-              <th className="p-4 border-b font-semibold">Lokasi</th>
-              <th className="p-4 border-b font-semibold">Status</th>
-              <th className="p-4 border-b font-semibold">Terdaftar Oleh</th>
-              <th className="p-4 border-b font-semibold">Terakhir Aktif</th>
-              <th className="p-4 border-b font-semibold text-center w-40">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {devices.map(d => (
-              <tr key={d.sn} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
-                <td className="p-4">
-                  <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{d.sn}</span>
-                  {d.device_name && <div className="text-[10px] text-gray-400 mt-1">{d.device_name}</div>}
-                </td>
-                <td className="p-4 font-semibold text-gray-700">{d.opd || <span className="text-gray-400 italic">Tidak terikat</span>}</td>
-                <td className="p-4 text-gray-600">{d.lokasi || '-'}</td>
-                <td className="p-4">
-                  {d.verified
-                    ? <span className="flex items-center gap-1 text-green-600 font-semibold text-xs"><CheckCircle size={14} /> Aktif</span>
-                    : <span className="flex items-center gap-1 text-red-500 font-semibold text-xs"><XCircle size={14} /> Nonaktif</span>}
-                </td>
-                <td className="p-4">{d.registered_by_name ? <span className="text-xs font-medium text-gray-700">{d.registered_by_name}</span> : <span className="text-gray-400 text-xs">—</span>}</td>
-                <td className="p-4 text-xs text-gray-500 whitespace-nowrap">{d.last_activity || 'Belum pernah'}</td>
-                <td className="p-4 text-center">
-                  <div className="flex justify-center gap-1">
-                    {/* Unbind Button — melepas ikatan */}
-                    {d.verified && d.opd && (
-                      <button
-                        onClick={() => handleUnbind(d.sn)}
-                        disabled={isLoading}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition"
-                        title="Lepas ikatan perangkat"
-                      >
-                        <Unlink size={13} /> Unbind
-                      </button>
-                    )}
-                    <button onClick={() => setEditModal({ sn: d.sn, name: d.name || '', nama_lokasi: d.lokasi || '', opd_id: d.opd_id || '', verified: d.verified })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
-                    <button onClick={() => handleDelete(d.sn)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus Permanen"><Trash2 size={15} /></button>
-                  </div>
-                </td>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input type="text" placeholder="Cari SN, Lokasi, atau Nama Device..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm min-w-[950px]">
+            <thead>
+              <tr className="bg-gray-50 text-gray-600">
+                <th className="p-4 border-b font-semibold whitespace-nowrap">SN Mesin</th>
+                <th className="p-4 border-b font-semibold">Instansi (OPD)</th>
+                <th className="p-4 border-b font-semibold">Lokasi</th>
+                <th className="p-4 border-b font-semibold">Status</th>
+                <th className="p-4 border-b font-semibold">Terdaftar Oleh</th>
+                <th className="p-4 border-b font-semibold whitespace-nowrap">Terakhir Aktif</th>
+                <th className="p-4 border-b font-semibold text-center w-40 sticky right-0 bg-gray-50">Aksi</th>
               </tr>
-            ))}
-            {devices.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">Belum ada perangkat terdaftar.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredDevices.map(d => (
+                <tr key={d.sn} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
+                  <td className="p-4 whitespace-nowrap">
+                    <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{d.sn}</span>
+                    {d.device_name && <div className="text-[10px] text-gray-400 mt-1">{d.device_name}</div>}
+                  </td>
+                  <td className="p-4 font-semibold text-gray-700">{d.opd || <span className="text-gray-400 italic">Tidak terikat</span>}</td>
+                  <td className="p-4 text-gray-600">{d.lokasi || '-'}</td>
+                  <td className="p-4">
+                    {d.verified
+                      ? <span className="flex items-center gap-1 text-green-600 font-semibold text-xs"><CheckCircle size={14} /> Aktif</span>
+                      : <span className="flex items-center gap-1 text-red-500 font-semibold text-xs"><XCircle size={14} /> Nonaktif</span>}
+                  </td>
+                  <td className="p-4">{d.registered_by_name ? <span className="text-xs font-medium text-gray-700">{d.registered_by_name}</span> : <span className="text-gray-400 text-xs">—</span>}</td>
+                  <td className="p-4 text-xs text-gray-500 whitespace-nowrap">{d.last_activity || 'Belum pernah'}</td>
+                  <td className="p-4 text-center sticky right-0 bg-white">
+                    <div className="flex justify-center gap-1">
+                      {d.verified && d.opd && (
+                        <button onClick={() => handleUnbind(d.sn)} disabled={isLoading}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition" title="Lepas ikatan">
+                          <Unlink size={13} /> Unbind
+                        </button>
+                      )}
+                      <button onClick={() => setEditModal({ sn: d.sn, name: d.name || '', nama_lokasi: d.lokasi || '', opd_id: d.opd_id || '', verified: d.verified })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
+                      <button onClick={() => handleDelete(d.sn)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus Permanen"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredDevices.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada perangkat terdaftar.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Edit Modal */}
