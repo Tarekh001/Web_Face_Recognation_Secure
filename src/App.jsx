@@ -10,6 +10,9 @@ import AdminPage from './pages/AdminPage';
 import DevicePage from './pages/DevicePage';
 import AuditPage from './pages/AuditPage';
 import SettingsPage from './pages/SettingsPage';
+import axios from 'axios';
+import Swal from 'sweetalert2';
+import useAutoLogout from './hooks/useAutoLogout';
 
 // Komponen Pelindung Standar: Harus punya token
 const ProtectedRoute = ({ children }) => {
@@ -27,13 +30,42 @@ const SuperAdminRoute = ({ children }) => {
 };
 
 // Layout wrapper untuk halaman admin
-const AdminLayout = ({ children }) => (
-  <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
-    <Navbar />
-    <div className="flex-1 h-full overflow-y-auto">
-      {children}
+const AdminLayout = ({ children }) => {
+  useAutoLogout();
+  return (
+    <div className="flex h-screen w-full bg-[#f4f7f6] overflow-hidden">
+      <Navbar />
+      <div className="flex-1 h-full overflow-y-auto">
+        {children}
+      </div>
     </div>
-  </div>
+  );
+};
+
+// Global Axios Interceptor for 401 Unauthorized responses
+axios.interceptors.response.use(
+    (response) => response, 
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sesi Telah Habis',
+                text: 'Sesi Anda telah berakhir. Silakan login kembali untuk keamanan.',
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'Login Ulang',
+                allowOutsideClick: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('user_role');
+                    localStorage.removeItem('user_nip');
+                    localStorage.removeItem('user_username');
+                    window.location.href = '/login'; 
+                }
+            });
+        }
+        return Promise.reject(error);
+    }
 );
 
 function App() {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
-import { Upload, Search, Calendar, ChevronLeft, ChevronRight, Filter, Clock, MapPin } from 'lucide-react';
+import { Download, Search, Calendar, ChevronLeft, ChevronRight, Filter, Clock, MapPin } from 'lucide-react';
 
 const Dashboard = () => {
   const [reports, setReports] = useState([]);
@@ -12,7 +12,8 @@ const Dashboard = () => {
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchReports = useCallback(async () => {
     const token = localStorage.getItem('access_token');
@@ -38,7 +39,7 @@ const Dashboard = () => {
       }
     } catch (err) { console.error('Gagal mengambil laporan:', err); }
     finally { setIsLoading(false); }
-  }, [currentPage, searchQuery, startDate, endDate, statusFilter]);
+  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter]);
 
   useEffect(() => {
     fetchReports();
@@ -48,19 +49,41 @@ const Dashboard = () => {
 
   const handleFilterChange = (setter) => (e) => { setter(e.target.value); setCurrentPage(1); };
   const handleResetFilters = () => { setSearchQuery(''); setStartDate(''); setEndDate(''); setStatusFilter(''); setCurrentPage(1); };
+  const handleItemsPerPageChange = (e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); };
 
-  const handleExportCSV = () => {
-    if (reports.length === 0) return alert('Tidak ada data untuk di-export');
-    let csv = 'NIP,Nama,Tanggal,Jam Masuk,Keterangan,Jam Keluar,Lokasi\n';
-    reports.forEach(r => {
-      const ket = r.status_masuk === 'LATE' && r.keterlambatan_menit > 0 ? `Terlambat ${r.keterlambatan_menit} Menit` : 'Tepat Waktu';
-      csv += `${r.nip},"${r.nama}",${r.tanggal},${r.jam_masuk || '-'},${r.status_masuk === 'ABSENT' ? 'Tidak Hadir' : ket},${r.jam_keluar || '-'},"${r.nama_lokasi || r.device_sn || '-'}"\n`;
-    });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Laporan_Presensi_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  const handleExportCSV = async () => {
+    if (totalItems === 0) return alert('Tidak ada data untuk di-export');
+    setIsExporting(true);
+    try {
+      // Fetch ALL filtered data (bypass pagination) for complete export
+      const token = localStorage.getItem('access_token');
+      const params = new URLSearchParams();
+      params.append('page', 1);
+      params.append('limit', 99999); // Request all records
+      if (searchQuery) params.append('search_name', searchQuery);
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      if (statusFilter) params.append('status_filter', statusFilter);
+
+      const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const allData = Array.isArray(res.data) ? res.data : (res.data.data || []);
+
+      if (allData.length === 0) return alert('Tidak ada data untuk di-export');
+
+      let csv = 'NIP,Nama,Tanggal,Jam Masuk,Keterangan,Jam Keluar,Lokasi\n';
+      allData.forEach(r => {
+        const ket = r.status_masuk === 'LATE' && r.keterlambatan_menit > 0 ? `Terlambat ${r.keterlambatan_menit} Menit` : 'Tepat Waktu';
+        csv += `${r.nip},"${r.nama}",${r.tanggal},${r.jam_masuk || '-'},${r.status_masuk === 'ABSENT' ? 'Tidak Hadir' : ket},${r.jam_keluar || '-'},"${r.nama_lokasi || r.device_sn || '-'}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `Laporan_Presensi_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    } catch (err) { alert('Gagal export: ' + (err.response?.data?.error || err.message)); }
+    finally { setIsExporting(false); }
   };
 
   const getPageNumbers = () => {
@@ -95,8 +118,8 @@ const Dashboard = () => {
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Laporan Presensi ASN</h1>
           <p className="text-sm text-gray-500 mt-1">Total <span className="font-semibold text-gray-700">{totalItems}</span> data</p>
         </div>
-        <button onClick={handleExportCSV} className="flex items-center gap-2 bg-[#005bb5] hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-          <Upload size={18} />Export CSV
+        <button onClick={handleExportCSV} disabled={isExporting} className="flex items-center gap-2 bg-[#005bb5] hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait">
+          {isExporting ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Exporting...</> : <><Download size={18} />Export CSV</>}
         </button>
       </div>
 
@@ -256,9 +279,22 @@ const Dashboard = () => {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-6 flex flex-wrap justify-between items-center gap-4">
+      {/* Pagination */}
+      <div className="mt-6 flex flex-wrap justify-between items-center gap-4">
+        <div className="flex items-center gap-4">
           <p className="text-sm text-gray-500">Halaman <span className="font-semibold text-gray-700">{currentPage}</span> dari <span className="font-semibold text-gray-700">{totalPages}</span><span className="mx-2 text-gray-300">•</span>{totalItems} data</p>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-400">Tampilkan</label>
+            <select value={itemsPerPage} onChange={handleItemsPerPageChange}
+              className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="text-xs text-gray-400">baris</span>
+          </div>
+        </div>
+        {totalPages > 1 && (
           <div className="flex items-center gap-1.5">
             <button id="btn-prev-page" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}
               className="flex items-center gap-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={16}/>Sebelumnya</button>
@@ -269,8 +305,8 @@ const Dashboard = () => {
             <button id="btn-next-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}
               className="flex items-center gap-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Selanjutnya<ChevronRight size={16}/></button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </main>
   );
 };

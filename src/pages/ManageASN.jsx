@@ -256,18 +256,26 @@ const ManageASN = () => {
                         {asn.cross_opd_privileges.map(p => (
                           <span key={p.akses_id} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full ring-1 ring-purple-200">
                             {p.opd_nama}
-                            <button onClick={() => handleRevokeAccess(p.akses_id, p.opd_nama, asn.nama)}
-                              className="ml-0.5 text-purple-400 hover:text-red-500 transition" title="Cabut akses"><X size={12}/></button>
+                            {asn.is_manageable && (
+                              <button onClick={() => handleRevokeAccess(p.akses_id, p.opd_nama, asn.nama)}
+                                className="ml-0.5 text-purple-400 hover:text-red-500 transition" title="Cabut akses"><X size={12}/></button>
+                            )}
                           </span>
                         ))}
                       </div>
                     ) : <span className="text-gray-300 text-xs italic">—</span>}
                   </td>
                   <td className="px-5 py-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => setEditingUser(asn)} className="text-blue-500 hover:text-blue-700 p-1" title="Edit"><Edit size={18}/></button>
-                      <button onClick={() => handleDelete(asn.id, asn.nama)} className="text-red-500 hover:text-red-700 p-1" title="Hapus"><Trash2 size={18}/></button>
-                    </div>
+                    {asn.is_manageable ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => setEditingUser(asn)} className="text-blue-500 hover:text-blue-700 p-1" title="Edit"><Edit size={18}/></button>
+                        <button onClick={() => handleDelete(asn.id, asn.nama)} className="text-red-500 hover:text-red-700 p-1" title="Hapus"><Trash2 size={18}/></button>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-400 ring-1 ring-gray-200 cursor-not-allowed" title="Akun Admin tidak dapat dikelola dari sini">
+                        <Shield size={10}/> Restricted
+                      </span>
+                    )}
                   </td>
                 </tr>
               )) : (

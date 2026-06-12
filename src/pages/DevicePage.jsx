@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { MonitorSmartphone, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X, Info, Unlink, Search } from 'lucide-react';
+import { MonitorSmartphone, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X, Info, Unlink, Search, Shield, ShieldOff } from 'lucide-react';
 
 const API = 'http://127.0.0.1:5000/api';
 
@@ -107,6 +107,7 @@ const DevicePage = () => {
                 <th className="p-4 border-b font-semibold">Status</th>
                 <th className="p-4 border-b font-semibold">Terdaftar Oleh</th>
                 <th className="p-4 border-b font-semibold whitespace-nowrap">Terakhir Aktif</th>
+                <th className="p-4 border-b font-semibold text-center">Anti-Spoof</th>
                 <th className="p-4 border-b font-semibold text-center w-40 sticky right-0 bg-gray-50">Aksi</th>
               </tr>
             </thead>
@@ -126,6 +127,11 @@ const DevicePage = () => {
                   </td>
                   <td className="p-4">{d.registered_by_name ? <span className="text-xs font-medium text-gray-700">{d.registered_by_name}</span> : <span className="text-gray-400 text-xs">—</span>}</td>
                   <td className="p-4 text-xs text-gray-500 whitespace-nowrap">{d.last_activity || 'Belum pernah'}</td>
+                  <td className="p-4 text-center">
+                    {(d.anti_spoofing_enabled !== false)
+                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 ring-1 ring-green-200" title="Anti-Spoofing aktif"><Shield size={12} /> Aktif</span>
+                      : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-200" title="Anti-Spoofing dinonaktifkan"><ShieldOff size={12} /> Off</span>}
+                  </td>
                   <td className="p-4 text-center sticky right-0 bg-white">
                     <div className="flex justify-center gap-1">
                       {d.verified && d.opd && (
@@ -134,13 +140,13 @@ const DevicePage = () => {
                           <Unlink size={13} /> Unbind
                         </button>
                       )}
-                      <button onClick={() => setEditModal({ sn: d.sn, name: d.name || '', nama_lokasi: d.lokasi || '', opd_id: d.opd_id || '', verified: d.verified })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
+                      <button onClick={() => setEditModal({ sn: d.sn, name: d.name || '', nama_lokasi: d.lokasi || '', opd_id: d.opd_id || '', verified: d.verified, anti_spoofing_enabled: d.anti_spoofing_enabled !== false })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
                       <button onClick={() => handleDelete(d.sn)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus Permanen"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {filteredDevices.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada perangkat terdaftar.'}</td></tr>}
+              {filteredDevices.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada perangkat terdaftar.'}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -176,6 +182,52 @@ const DevicePage = () => {
                   <span className="text-sm font-semibold text-gray-700">Verified</span>
                 </label>
               </div>
+            </div>
+
+            {/* Anti-Spoofing Toggle */}
+            <div className={`mt-4 rounded-xl border-2 p-4 transition-all ${
+              editModal.anti_spoofing_enabled
+                ? 'border-green-200 bg-green-50/30'
+                : 'border-amber-200 bg-amber-50/30'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    editModal.anti_spoofing_enabled ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
+                  }`}>
+                    {editModal.anti_spoofing_enabled ? <Shield size={20} /> : <ShieldOff size={20} />}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800">Fitur Anti-Spoofing (Liveness)</h4>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Analisis temporal multi-frame untuk mendeteksi foto cetak dan layar digital.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditModal({...editModal, anti_spoofing_enabled: !editModal.anti_spoofing_enabled})}
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                    editModal.anti_spoofing_enabled
+                      ? 'bg-green-500 focus:ring-green-400'
+                      : 'bg-gray-300 focus:ring-gray-400'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
+                    editModal.anti_spoofing_enabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+              <p className={`mt-2 text-[11px] font-medium ${
+                editModal.anti_spoofing_enabled ? 'text-green-700' : 'text-amber-600'
+              }`}>
+                {editModal.anti_spoofing_enabled
+                  ? '✅ Aktif — Perangkat ini dilindungi dari serangan presentasi'
+                  : '⚠️ Nonaktif — Liveness detection dimatikan untuk perangkat ini'}
+              </p>
+              {!editModal.anti_spoofing_enabled && (
+                <p className="mt-1.5 text-[10px] text-amber-600 italic">
+                  Matikan hanya jika lokasi mesin memiliki pencahayaan buruk yang menghambat presensi.
+                </p>
+              )}
             </div>
             <button onClick={handleUpdate} disabled={isLoading} className="mt-5 w-full bg-blue-600 text-white font-bold p-2.5 rounded-lg hover:bg-blue-700 transition">{isLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
           </div>
