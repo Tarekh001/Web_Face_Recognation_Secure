@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History, Settings } from 'lucide-react';
+import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History, Settings, CalendarDays } from 'lucide-react';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -26,7 +26,8 @@ const Navbar = () => {
   const navItems = [
     { path: '/dashboard', label: 'Report Dashboard', icon: <LayoutDashboard size={20} /> },
     { path: '/manage-asn', label: 'Daftar ASN', icon: <Users size={20} /> },
-    { path: '/register', label: 'Add new ASN', icon: <UserPlus size={20} /> }
+    { path: '/register', label: 'Add new ASN', icon: <UserPlus size={20} /> },
+    { path: '/kegiatan', label: 'Jadwal Kegiatan', icon: <CalendarDays size={20} /> }
   ];
 
   // Sub-menu Master Data (hanya Super Admin)

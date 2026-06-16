@@ -1,0 +1,40 @@
+schema_version: 1
+module_path: ""
+title: Face Recognition Attendance & Admin Portal
+scope:
+    - README.md
+    - .gitignore
+    - eslint.config.js
+    - index.html
+    - package.json
+    - package-lock.json
+    - postcss.config.js
+    - tailwind.config.js
+    - vite.config.js
+    - src/
+    - public\models\tiny_face_detector_model-shard1
+    - public\models\tiny_face_detector_model-weights_manifest.json
+    - public\vite.svg
+    - src\App.css
+    - src\App.jsx
+    - src\assets\Kab_Tangerang.png
+    - src\assets\react.svg
+    - src\components\Navbar.jsx
+    - src\hooks\useAutoLogout.js
+    - src\index.css
+    - src\main.jsx
+    - src\pages\AdminPage.jsx
+    - src\pages\AuditPage.jsx
+    - src\pages\Dashboard.jsx
+    - src\pages\DevicePage.jsx
+    - src\pages\FaceScan.jsx
+    - src\pages\JadwalKegiatan.jsx
+    - src\pages\Login.jsx
+    - src\pages\ManageASN.jsx
+    - src\pages\MasterData.jsx
+    - src\pages\OpdPage.jsx
+    - src\pages\RegisterUser.jsx
+    - src\pages\SettingsPage.jsx
+source_files: []
+depends_on: []
+related_to: []

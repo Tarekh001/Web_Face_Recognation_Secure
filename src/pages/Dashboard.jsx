@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
-import { Download, Search, Calendar, ChevronLeft, ChevronRight, Filter, Clock, MapPin } from 'lucide-react';
+import { Download, Search, Calendar, ChevronLeft, ChevronRight, Filter, Clock, MapPin, CalendarDays } from 'lucide-react';
 
 const Dashboard = () => {
   const [reports, setReports] = useState([]);
@@ -14,6 +14,8 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [isExporting, setIsExporting] = useState(false);
+  const [kegiatanList, setKegiatanList] = useState([]);
+  const [selectedKegiatanId, setSelectedKegiatanId] = useState('');
 
   const fetchReports = useCallback(async () => {
     const token = localStorage.getItem('access_token');
@@ -26,6 +28,7 @@ const Dashboard = () => {
       if (startDate) params.append('start_date', startDate);
       if (endDate) params.append('end_date', endDate);
       if (statusFilter) params.append('status_filter', statusFilter);
+      if (selectedKegiatanId) params.append('kegiatan_id', selectedKegiatanId);
 
       const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -39,7 +42,7 @@ const Dashboard = () => {
       }
     } catch (err) { console.error('Gagal mengambil laporan:', err); }
     finally { setIsLoading(false); }
-  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter]);
+  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter, selectedKegiatanId]);
 
   useEffect(() => {
     fetchReports();
@@ -47,8 +50,16 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchReports]);
 
+  // Fetch kegiatan list for filter dropdown
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    axios.get('http://127.0.0.1:5000/api/kegiatan', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => setKegiatanList(Array.isArray(res.data) ? res.data : res.data.data || []))
+      .catch(() => {});
+  }, []);
+
   const handleFilterChange = (setter) => (e) => { setter(e.target.value); setCurrentPage(1); };
-  const handleResetFilters = () => { setSearchQuery(''); setStartDate(''); setEndDate(''); setStatusFilter(''); setCurrentPage(1); };
+  const handleResetFilters = () => { setSearchQuery(''); setStartDate(''); setEndDate(''); setStatusFilter(''); setSelectedKegiatanId(''); setCurrentPage(1); };
   const handleItemsPerPageChange = (e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); };
 
   const handleExportCSV = async () => {
@@ -64,6 +75,7 @@ const Dashboard = () => {
       if (startDate) params.append('start_date', startDate);
       if (endDate) params.append('end_date', endDate);
       if (statusFilter) params.append('status_filter', statusFilter);
+      if (selectedKegiatanId) params.append('kegiatan_id', selectedKegiatanId);
 
       const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -108,7 +120,7 @@ const Dashboard = () => {
     catch { return d; }
   };
 
-  const hasActiveFilters = searchQuery || startDate || endDate || statusFilter;
+  const hasActiveFilters = searchQuery || startDate || endDate || statusFilter || selectedKegiatanId;
 
   return (
     <main className="p-8 w-full h-full">
@@ -160,6 +172,20 @@ const Dashboard = () => {
                 <option value="ON_TIME">Tepat Waktu</option>
                 <option value="LATE">Terlambat</option>
                 <option value="ABSENT">Tidak Hadir</option>
+              </select>
+              <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-90 pointer-events-none" size={16} />
+            </div>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Filter Kegiatan</label>
+            <div className="relative">
+              <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <select value={selectedKegiatanId} onChange={handleFilterChange(setSelectedKegiatanId)}
+                className="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-600 appearance-none cursor-pointer">
+                <option value="">Semua (Presensi Reguler)</option>
+                {kegiatanList.map(k => (
+                  <option key={k.id} value={k.id}>{k.nama_kegiatan}</option>
+                ))}
               </select>
               <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-90 pointer-events-none" size={16} />
             </div>

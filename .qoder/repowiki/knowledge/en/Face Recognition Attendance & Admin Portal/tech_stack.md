@@ -1,0 +1,5 @@
+- Frontend Framework: React 19 with Vite build tool.
+- AI/ML: `@vladmandic/face-api` for client-side face detection.
+- Styling: Tailwind CSS v3 with PostCSS.
+- HTTP Client: Axios for API communication.
+- UI Components: `lucide-react` for icons, `sweetalert2` for alerts.

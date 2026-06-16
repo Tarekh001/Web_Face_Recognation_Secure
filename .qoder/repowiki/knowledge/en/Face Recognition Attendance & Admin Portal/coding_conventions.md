@@ -1,0 +1,4 @@
+- Role-based access control is implemented via higher-order components (`ProtectedRoute`, `SuperAdminRoute`) in `App.jsx` that check `localStorage` for tokens and roles before rendering protected content.
+- Authentication state (token, role, user info) is persisted in `localStorage` and accessed directly in components rather than using a global state management library like Redux or Context.
+- API interactions use Axios with hardcoded base URLs (e.g., `http://127.0.0.1:5000`) defined directly within component files like `FaceScan.jsx` and `Login.jsx`.
+- Custom hooks such as `useAutoLogout` are used to encapsulate side-effects like session monitoring and automatic redirection upon token expiration.

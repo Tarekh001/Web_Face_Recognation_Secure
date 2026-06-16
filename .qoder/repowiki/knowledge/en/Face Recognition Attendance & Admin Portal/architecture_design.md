@@ -1,0 +1,5 @@
+- Entry point: `src/main.jsx` bootstraps the React root.
+- Routing & Layout: `src/App.jsx` defines public (`/`, `/login`) and protected routes using `react-router-dom`. It implements `ProtectedRoute` and `SuperAdminRoute` wrappers for role-based access control (RBAC) and an `AdminLayout` that includes the `Navbar`.
+- Core Features: `src/pages/FaceScan.jsx` handles client-side face detection using `@vladmandic/face-api` and sends cropped images to a backend Flask API. `src/pages/Login.jsx` manages authentication via JWT tokens stored in `localStorage`.
+- State & Hooks: `src/hooks/useAutoLogout.js` monitors JWT expiration to enforce session timeouts. `src/components/Navbar.jsx` provides dynamic navigation based on user roles (`super_admin` vs `admin_opd`).
+- Styling: Uses Tailwind CSS for utility-first styling, with some custom inline styles in specific components like `Login.jsx`.

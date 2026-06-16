@@ -1,0 +1,1 @@
+A React-based web application for facial recognition attendance tracking and administrative management of government personnel.
