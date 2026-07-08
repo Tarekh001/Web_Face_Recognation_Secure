@@ -11,6 +11,7 @@ import DevicePage from './pages/DevicePage';
 import AuditPage from './pages/AuditPage';
 import SettingsPage from './pages/SettingsPage';
 import JadwalKegiatan from './pages/JadwalKegiatan';
+import LaporanKegiatan from './pages/LaporanKegiatan';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import useAutoLogout from './hooks/useAutoLogout';
@@ -74,7 +75,8 @@ function App() {
     <Router>
       <Routes>
         {/* Jalur Publik */}
-        <Route path="/" element={<FaceScan />} />
+        <Route path="/face-scan" element={<FaceScan />} />
+        <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
 
         {/* Jalur Privat: Admin OPD & Super Admin */}
@@ -82,6 +84,7 @@ function App() {
         <Route path="/register" element={<ProtectedRoute><AdminLayout><RegisterUser /></AdminLayout></ProtectedRoute>} />
         <Route path="/manage-asn" element={<ProtectedRoute><AdminLayout><ManageASN /></AdminLayout></ProtectedRoute>} />
         <Route path="/kegiatan" element={<ProtectedRoute><AdminLayout><JadwalKegiatan /></AdminLayout></ProtectedRoute>} />
+        <Route path="/laporan-kegiatan" element={<ProtectedRoute><AdminLayout><LaporanKegiatan /></AdminLayout></ProtectedRoute>} />
 
         {/* Jalur Super Admin: Master Data — masing-masing komponen terpisah */}
         <Route path="/master-data" element={<SuperAdminRoute><AdminLayout><OpdPage /></AdminLayout></SuperAdminRoute>} />

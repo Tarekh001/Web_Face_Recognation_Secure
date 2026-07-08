@@ -123,7 +123,7 @@ const Login = () => {
         <div className="login-header">
           <h1 className="login-title">Selamat Datang</h1>
           <p className="login-subtitle">Portal Admin — Sistem Presensi Wajah</p>
-          <p className="login-org">Diskominfo Kabupaten Tangerang</p>
+          <p className="login-org">Kabupaten Tangerang</p>
         </div>
 
         {/* ── Error Message ── */}

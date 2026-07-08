@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History, Settings, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, UserPlus, ScanFace, LogOut, UserCircle, Users, Database, Building2, UserCog, MonitorSmartphone, ChevronDown, History, Settings, CalendarDays, ClipboardList } from 'lucide-react';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -27,7 +27,8 @@ const Navbar = () => {
     { path: '/dashboard', label: 'Report Dashboard', icon: <LayoutDashboard size={20} /> },
     { path: '/manage-asn', label: 'Daftar ASN', icon: <Users size={20} /> },
     { path: '/register', label: 'Add new ASN', icon: <UserPlus size={20} /> },
-    { path: '/kegiatan', label: 'Jadwal Kegiatan', icon: <CalendarDays size={20} /> }
+    { path: '/kegiatan', label: 'Jadwal Kegiatan', icon: <CalendarDays size={20} /> },
+    { path: '/laporan-kegiatan', label: 'Laporan Kegiatan', icon: <ClipboardList size={20} /> }
   ];
 
   // Sub-menu Master Data (hanya Super Admin)
@@ -130,8 +131,8 @@ const Navbar = () => {
 
         {/* Presensi ASN — paling bawah */}
         <Link
-          to="/"
-          className={`text-[#f5f5f5] text-xs flex items-center gap-4 px-8 py-4 font-semibold transition ${isActiveRoute('/')
+          to="/face-scan"
+          className={`text-[#f5f5f5] text-xs flex items-center gap-4 px-8 py-4 font-semibold transition ${isActiveRoute('/face-scan')
               ? 'bg-[#0074BA] border-l-4 border-white'
               : 'hover:bg-[#0074BA] border-l-4 border-transparent'
             }`}

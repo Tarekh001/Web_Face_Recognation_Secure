@@ -90,21 +90,12 @@ const JadwalKegiatan = () => {
   });
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // === Assignment Modal State (Daftarkan Pegawai to a Global Event) ===
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignTarget, setAssignTarget] = useState(null); // { id, nama_kegiatan }
-  const [assignPegawaiList, setAssignPegawaiList] = useState([]);
-  const [assignSearch, setAssignSearch] = useState('');
-  const [assignSelectedNips, setAssignSelectedNips] = useState([]);
-  const [isLoadingAssign, setIsLoadingAssign] = useState(false);
-  const [isSubmittingAssign, setIsSubmittingAssign] = useState(false);
-
-  // === Internal Event Pegawai Selector (for Admin OPD creating Internal) ===
-  const [internalPegawaiList, setInternalPegawaiList] = useState([]);
-  const [internalSearch, setInternalSearch] = useState('');
-  const [internalSelectedNips, setInternalSelectedNips] = useState([]);
-  const [isLoadingInternal, setIsLoadingInternal] = useState(false);
-  const [isAllOpd, setIsAllOpd] = useState(false); // only for Super Admin Global toggle
+  // === OPD Invitation State (replaces legacy NIP assignment) ===
+  const [opdList, setOpdList] = useState([]);
+  const [selectedOpdIds, setSelectedOpdIds] = useState([]);
+  const [opdSearch, setOpdSearch] = useState('');
+  const [isLoadingOpd, setIsLoadingOpd] = useState(false);
+  const [isGlobalToggle, setIsGlobalToggle] = useState(false);
 
   // === Helpers ===
   const formatDate = (d) => {
@@ -127,16 +118,14 @@ const JadwalKegiatan = () => {
 
   useEffect(() => { fetchKegiatan(); }, [fetchKegiatan]);
 
-  // === API: Fetch own OPD employees (for Internal creation or Assignment) ===
-  const fetchOwnOpdPegawai = useCallback(async () => {
-    setIsLoadingInternal(true);
-    setIsLoadingAssign(true);
+  // === API: Fetch OPD list (for invitation multi-select) ===
+  const fetchOpdList = useCallback(async () => {
+    setIsLoadingOpd(true);
     try {
-      const res = await axios.get(`${API_BASE}/manage-asn`, getAuthHeaders());
-      const all = Array.isArray(res.data) ? res.data : [];
-      return all;
-    } catch { return []; }
-    finally { setIsLoadingInternal(false); setIsLoadingAssign(false); }
+      const res = await axios.get(`${API_BASE}/opd`, getAuthHeaders());
+      setOpdList(Array.isArray(res.data) ? res.data : []);
+    } catch { setOpdList([]); }
+    finally { setIsLoadingOpd(false); }
   }, []);
 
   // ─────────────────────────────────
@@ -149,16 +138,11 @@ const JadwalKegiatan = () => {
       tanggal_mulai: '', tanggal_selesai: '',
       jam_mulai: '', jam_selesai: '',
     });
-    setIsAllOpd(isSuperAdmin); // Super Admin creates Global by default
-    setInternalSelectedNips([]);
-    setInternalSearch('');
-    setInternalPegawaiList([]);
+    setIsGlobalToggle(isSuperAdmin);
+    setSelectedOpdIds([]);
+    setOpdSearch('');
     setShowForm(true);
-
-    // If Admin OPD, pre-fetch their own employees
-    if (!isSuperAdmin) {
-      fetchOwnOpdPegawai().then(setInternalPegawaiList);
-    }
+    fetchOpdList();
   };
 
   const resetForm = () => {
@@ -169,9 +153,8 @@ const JadwalKegiatan = () => {
       tanggal_mulai: '', tanggal_selesai: '',
       jam_mulai: '', jam_selesai: '',
     });
-    setInternalSelectedNips([]);
-    setInternalPegawaiList([]);
-    setInternalSearch('');
+    setSelectedOpdIds([]);
+    setOpdSearch('');
   };
 
   const handleInputChange = (e) => {
@@ -184,7 +167,6 @@ const JadwalKegiatan = () => {
     setFormData(prev => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
   };
 
-  // Map click / marker drag handler
   const handleMapInteraction = (lat, lng) => {
     setFormData(prev => ({
       ...prev,
@@ -193,7 +175,6 @@ const JadwalKegiatan = () => {
     }));
   };
 
-  // Geocoding (Nominatim)
   const handleGeocode = async () => {
     const alamat = formData.alamat_lokasi.trim();
     if (!alamat) {
@@ -217,10 +198,10 @@ const JadwalKegiatan = () => {
     } finally { setIsGeocoding(false); }
   };
 
-  // Internal pegawai toggle
-  const handleToggleInternalPegawai = (nip) => {
-    setInternalSelectedNips(prev =>
-      prev.includes(nip) ? prev.filter(n => n !== nip) : [...prev, nip]
+  // OPD toggle
+  const handleToggleOpd = (opdId) => {
+    setSelectedOpdIds(prev =>
+      prev.includes(opdId) ? prev.filter(id => id !== opdId) : [...prev, opdId]
     );
   };
 
@@ -233,10 +214,8 @@ const JadwalKegiatan = () => {
     if (!formData.tanggal_mulai || !formData.tanggal_selesai) {
       return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Tanggal mulai dan selesai wajib diisi.' });
     }
-
-    const creatingGlobal = isSuperAdmin;
-    if (!creatingGlobal && !isAllOpd && internalSelectedNips.length === 0) {
-      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih minimal satu pegawai.' });
+    if (!isGlobalToggle && selectedOpdIds.length === 0) {
+      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih minimal satu OPD yang diundang.' });
     }
 
     setIsSubmitting(true);
@@ -252,9 +231,8 @@ const JadwalKegiatan = () => {
         tanggal_selesai: formData.tanggal_selesai,
         jam_mulai: formData.jam_mulai || null,
         jam_selesai: formData.jam_selesai || null,
-        is_global: creatingGlobal,
-        is_all_opd: creatingGlobal ? true : isAllOpd,
-        peserta_nips: creatingGlobal ? [] : (isAllOpd ? [] : internalSelectedNips),
+        is_global: isGlobalToggle,
+        invited_opd_ids: isGlobalToggle ? [] : selectedOpdIds,
       };
       await axios.post(`${API_BASE}/kegiatan`, payload, getAuthHeaders());
       Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Kegiatan berhasil ditambahkan.', timer: 2000, showConfirmButton: false });
@@ -263,55 +241,6 @@ const JadwalKegiatan = () => {
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Gagal Menambahkan', text: err.response?.data?.error || err.message });
     } finally { setIsSubmitting(false); }
-  };
-
-  // ─────────────────────────────────
-  // ASSIGNMENT MODAL LOGIC (Global Event)
-  // ─────────────────────────────────
-  const openAssignModal = async (kegiatan) => {
-    setAssignTarget(kegiatan); // store full event for read-only context display
-    setAssignSelectedNips([]);
-    setAssignSearch('');
-    setShowAssignModal(true);
-    // Fetch own OPD's employees
-    const pegawai = await fetchOwnOpdPegawai();
-    setAssignPegawaiList(pegawai);
-  };
-
-  const handleToggleAssignPegawai = (nip) => {
-    setAssignSelectedNips(prev =>
-      prev.includes(nip) ? prev.filter(n => n !== nip) : [...prev, nip]
-    );
-  };
-
-  const handleSelectAllAssignVisible = () => {
-    const visibleNips = filteredAssignPegawai.map(p => p.nip);
-    setAssignSelectedNips(prev => [...new Set([...prev, ...visibleNips])]);
-  };
-
-  const handleDeselectAllAssignVisible = () => {
-    const visibleNips = filteredAssignPegawai.map(p => p.nip);
-    setAssignSelectedNips(prev => prev.filter(n => !visibleNips.includes(n)));
-  };
-
-  const handleSubmitAssignment = async () => {
-    if (assignSelectedNips.length === 0) {
-      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih minimal satu pegawai.' });
-    }
-    setIsSubmittingAssign(true);
-    try {
-      await axios.post(
-        `${API_BASE}/kegiatan/${assignTarget.id}/daftar`,
-        { peserta_nips: assignSelectedNips },
-        getAuthHeaders()
-      );
-      Swal.fire({ icon: 'success', title: 'Berhasil', text: `${assignSelectedNips.length} pegawai berhasil didaftarkan.`, timer: 2000, showConfirmButton: false });
-      setShowAssignModal(false);
-      setAssignTarget(null);
-      fetchKegiatan();
-    } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Gagal Mendaftarkan', text: err.response?.data?.error || err.message });
-    } finally { setIsSubmittingAssign(false); }
   };
 
   // === Delete ===
@@ -330,15 +259,10 @@ const JadwalKegiatan = () => {
     }
   };
 
-  // === Filtered lists ===
-  const filteredInternalPegawai = internalPegawaiList.filter(p =>
-    p.nama?.toLowerCase().includes(internalSearch.toLowerCase()) ||
-    p.nip?.toLowerCase().includes(internalSearch.toLowerCase())
-  );
-
-  const filteredAssignPegawai = assignPegawaiList.filter(p =>
-    p.nama?.toLowerCase().includes(assignSearch.toLowerCase()) ||
-    p.nip?.toLowerCase().includes(assignSearch.toLowerCase())
+  // === Filtered OPD list ===
+  const filteredOpdList = opdList.filter(o =>
+    o.nama_opd?.toLowerCase().includes(opdSearch.toLowerCase()) ||
+    o.kode_opd?.toLowerCase().includes(opdSearch.toLowerCase())
   );
 
   // Map position
@@ -350,6 +274,17 @@ const JadwalKegiatan = () => {
   // Split data by scope for tabs
   const globalEvents = kegiatanList.filter(k => k.is_global === true);
   const internalEvents = kegiatanList.filter(k => k.is_global !== true);
+
+
+
+
+
+
+
+
+
+
+
 
   // =====================================================================
   // RENDER
@@ -481,32 +416,23 @@ const JadwalKegiatan = () => {
                             </span>
                           )}
                         </td>
-                        {/* Peserta Terdaftar */}
+                        {/* OPD & Kehadiran */}
                         <td className="px-4 py-3.5 text-center">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ring-1 ${
                             row.is_global
                               ? 'bg-purple-50 text-purple-700 ring-purple-200'
                               : 'bg-amber-50 text-amber-600 ring-amber-200'
                           }`}>
-                            <Users size={11} /> {row.jumlah_peserta ?? row.peserta_nips?.length ?? 0} Pegawai
+                            <Building2 size={11} /> {row.is_global ? 'Semua OPD' : `${row.jumlah_opd_diundang ?? 0} OPD`}
+                          </span>
+                          <span className="block mt-1 text-[10px] text-green-600 font-semibold">
+                            <Users size={10} className="inline mr-0.5" />{row.jumlah_hadir ?? 0} Hadir
                           </span>
                         </td>
-                        {/* Aksi — strictly based on active tab + role */}
+                        {/* Aksi */}
                         <td className="px-4 py-3.5 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            {activeTab === 'global' && !isSuperAdmin && (
-                              <button onClick={() => openAssignModal(row)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition ring-1 ring-blue-200">
-                                <UserPlus size={13} /> Daftarkan Pegawai
-                              </button>
-                            )}
-                            {activeTab === 'global' && isSuperAdmin && (
-                              <button onClick={() => handleDelete(row.id, row.nama_kegiatan)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition ring-1 ring-red-200">
-                                <Trash2 size={13} /> Hapus
-                              </button>
-                            )}
-                            {activeTab === 'internal' && !isSuperAdmin && (
+                            {((activeTab === 'global' && isSuperAdmin) || (activeTab === 'internal' && !isSuperAdmin)) && (
                               <button onClick={() => handleDelete(row.id, row.nama_kegiatan)}
                                 className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition ring-1 ring-red-200">
                                 <Trash2 size={13} /> Hapus
@@ -656,95 +582,95 @@ const JadwalKegiatan = () => {
               {!isSuperAdmin && (
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
-                    Penugasan Pegawai
+                    Undangan OPD
                   </label>
 
-                  {/* Toggle: Seluruh OPD vs Pilih Pegawai */}
+                  {/* Toggle: Global vs Pilih OPD */}
                   <div className="flex gap-3 mb-3">
-                    <button type="button" onClick={() => setIsAllOpd(true)}
+                    <button type="button" onClick={() => setIsGlobalToggle(true)}
                       className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold border transition ${
-                        isAllOpd ? 'bg-[#0057A4] text-white border-[#0057A4] shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        isGlobalToggle ? 'bg-[#0057A4] text-white border-[#0057A4] shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                       }`}>
-                      <Users size={16} /> Seluruh OPD Saya
+                      <Globe size={16} /> Semua OPD (Global)
                     </button>
-                    <button type="button" onClick={() => setIsAllOpd(false)}
+                    <button type="button" onClick={() => setIsGlobalToggle(false)}
                       className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold border transition ${
-                        !isAllOpd ? 'bg-[#0057A4] text-white border-[#0057A4] shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        !isGlobalToggle ? 'bg-[#0057A4] text-white border-[#0057A4] shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                       }`}>
-                      Pilih Pegawai Tertentu
+                      <Building2 size={16} /> Pilih OPD Tertentu
                     </button>
                   </div>
 
-                  {/* Pegawai Checkbox Table */}
-                  {!isAllOpd && (
+                  {/* OPD Checkbox List */}
+                  {!isGlobalToggle && (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="p-3 bg-gray-50 border-b border-gray-200 space-y-2">
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                          <input type="text" placeholder="Cari nama atau NIP..."
-                            value={internalSearch} onChange={e => setInternalSearch(e.target.value)}
+                          <input type="text" placeholder="Cari nama OPD..."
+                            value={opdSearch} onChange={e => setOpdSearch(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-gray-500">
-                            <span className="font-bold text-blue-600">{internalSelectedNips.length}</span> pegawai dipilih
+                            <span className="font-bold text-blue-600">{selectedOpdIds.length}</span> OPD dipilih
                           </span>
                           <div className="flex gap-2">
                             <button type="button"
-                              onClick={() => { const nips = filteredInternalPegawai.map(p => p.nip); setInternalSelectedNips(prev => [...new Set([...prev, ...nips])]); }}
+                              onClick={() => setSelectedOpdIds(filteredOpdList.map(o => o.id))}
                               className="text-[11px] text-blue-600 hover:underline font-medium">Pilih semua</button>
                             <span className="text-gray-300">|</span>
                             <button type="button"
-                              onClick={() => { const nips = filteredInternalPegawai.map(p => p.nip); setInternalSelectedNips(prev => prev.filter(n => !nips.includes(n))); }}
+                              onClick={() => setSelectedOpdIds([])}
                               className="text-[11px] text-red-500 hover:underline font-medium">Batal semua</button>
                           </div>
                         </div>
                       </div>
                       <div className="max-h-56 overflow-y-auto">
-                        {isLoadingInternal ? (
+                        {isLoadingOpd ? (
                           <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
-                            <Loader2 size={18} className="animate-spin" /> Memuat pegawai...
+                            <Loader2 size={18} className="animate-spin" /> Memuat daftar OPD...
                           </div>
-                        ) : filteredInternalPegawai.length > 0 ? (
+                        ) : filteredOpdList.length > 0 ? (
                           <table className="w-full text-sm border-collapse">
                             <thead className="bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider sticky top-0">
-                              <tr><th className="px-3 py-2 w-8"></th><th className="px-3 py-2 text-left">Nama</th><th className="px-3 py-2 text-left">NIP</th></tr>
+                              <tr><th className="px-3 py-2 w-8"></th><th className="px-3 py-2 text-left">Nama OPD</th><th className="px-3 py-2 text-left">Kode</th></tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                              {filteredInternalPegawai.map(p => {
-                                const isSel = internalSelectedNips.includes(p.nip);
+                              {filteredOpdList.map(o => {
+                                const isSel = selectedOpdIds.includes(o.id);
                                 return (
-                                  <tr key={p.nip} onClick={() => handleToggleInternalPegawai(p.nip)}
+                                  <tr key={o.id} onClick={() => handleToggleOpd(o.id)}
                                     className={`cursor-pointer transition ${isSel ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
                                     <td className="px-3 py-2.5 text-center">
                                       {isSel ? <CheckSquare size={16} className="text-blue-600 mx-auto" /> : <Square size={16} className="text-gray-300 mx-auto" />}
                                     </td>
-                                    <td className="px-3 py-2.5 font-medium text-gray-800">{p.nama}</td>
-                                    <td className="px-3 py-2.5 font-mono text-[11px] text-gray-400">{p.nip}</td>
+                                    <td className="px-3 py-2.5 font-medium text-gray-800">{o.nama_opd}</td>
+                                    <td className="px-3 py-2.5 font-mono text-[11px] text-gray-400">{o.kode_opd}</td>
                                   </tr>
                                 );
                               })}
                             </tbody>
                           </table>
                         ) : (
-                          <div className="text-center py-8 text-gray-400 text-sm">Tidak ada pegawai ditemukan.</div>
+                          <div className="text-center py-8 text-gray-400 text-sm">Tidak ada OPD ditemukan.</div>
                         )}
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Super Admin info */}
-              {isSuperAdmin && (
-                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
-                  <ShieldCheck size={20} className="text-purple-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-purple-800">Kegiatan Global (Lintas OPD)</p>
-                    <p className="text-xs text-purple-600 mt-0.5">
-                      Kegiatan ini akan terlihat oleh seluruh Admin OPD. Mereka dapat mendaftarkan pegawainya masing-masing melalui tombol "Daftarkan Pegawai".
-                    </p>
-                  </div>
+                  {/* Global info */}
+                  {isGlobalToggle && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
+                      <ShieldCheck size={20} className="text-purple-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-purple-800">Kegiatan Global (Seluruh OPD)</p>
+                        <p className="text-xs text-purple-600 mt-0.5">
+                          Semua ASN dari seluruh OPD dapat melakukan presensi pada kegiatan ini.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -758,126 +684,6 @@ const JadwalKegiatan = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════
-          ASSIGNMENT MODAL (Daftarkan Pegawai to Global Event)
-         ══════════════════════════════════════════════ */}
-      {showAssignModal && assignTarget && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 overflow-y-auto py-6 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <UserPlus size={20} className="text-blue-600" /> Daftarkan Pegawai
-              </h2>
-              <button onClick={() => { setShowAssignModal(false); setAssignTarget(null); }}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {/* Read-Only Event Context */}
-              <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-4 space-y-2">
-                <div className="flex items-center gap-2 mb-2">
-                  <Globe size={16} className="text-purple-600" />
-                  <p className="text-xs font-bold text-purple-500 uppercase tracking-wider">Undangan Kegiatan Global</p>
-                </div>
-                <h3 className="text-base font-bold text-gray-900">{assignTarget.nama_kegiatan}</h3>
-                {assignTarget.keterangan && (
-                  <p className="text-sm text-gray-600">{assignTarget.keterangan}</p>
-                )}
-                <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-2">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <CalendarDays size={13} className="text-gray-400" />
-                    <span>{formatDate(assignTarget.tanggal_mulai)} — {formatDate(assignTarget.tanggal_selesai)}</span>
-                  </div>
-                  {assignTarget.alamat_lokasi && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <MapPin size={13} className="text-gray-400" />
-                      <span>{assignTarget.alamat_lokasi}</span>
-                    </div>
-                  )}
-                  {assignTarget.radius_toleransi && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-600">Radius {assignTarget.radius_toleransi}m</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">Pilih pegawai OPD Anda yang akan diikutsertakan dalam kegiatan ini:</p>
-
-              {/* Search + Bulk */}
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input type="text" placeholder="Cari nama atau NIP..."
-                    value={assignSearch} onChange={e => setAssignSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full">
-                    <Users size={12} /> Terpilih: {assignSelectedNips.length} Pegawai
-                  </span>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={handleSelectAllAssignVisible}
-                      className="text-[11px] text-blue-600 hover:underline font-medium">Pilih semua</button>
-                    <span className="text-gray-300">|</span>
-                    <button type="button" onClick={handleDeselectAllAssignVisible}
-                      className="text-[11px] text-red-500 hover:underline font-medium">Batal semua</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pegawai Table */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className="max-h-72 overflow-y-auto">
-                  {isLoadingAssign ? (
-                    <div className="flex items-center justify-center py-10 gap-2 text-gray-400 text-sm">
-                      <Loader2 size={18} className="animate-spin" /> Memuat pegawai...
-                    </div>
-                  ) : filteredAssignPegawai.length > 0 ? (
-                    <table className="w-full text-sm border-collapse">
-                      <thead className="bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider sticky top-0">
-                        <tr><th className="px-3 py-2 w-8"></th><th className="px-3 py-2 text-left">Nama</th><th className="px-3 py-2 text-left">NIP</th></tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {filteredAssignPegawai.map(p => {
-                          const isSel = assignSelectedNips.includes(p.nip);
-                          return (
-                            <tr key={p.nip} onClick={() => handleToggleAssignPegawai(p.nip)}
-                              className={`cursor-pointer transition ${isSel ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-                              <td className="px-3 py-2.5 text-center">
-                                {isSel ? <CheckSquare size={16} className="text-blue-600 mx-auto" /> : <Square size={16} className="text-gray-300 mx-auto" />}
-                              </td>
-                              <td className="px-3 py-2.5 font-medium text-gray-800">{p.nama}</td>
-                              <td className="px-3 py-2.5 font-mono text-[11px] text-gray-400">{p.nip}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="text-center py-10 text-gray-400 text-sm">Tidak ada pegawai ditemukan.</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Submit */}
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowAssignModal(false); setAssignTarget(null); }}
-                  className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Batal</button>
-                <button type="button" onClick={handleSubmitAssignment} disabled={isSubmittingAssign}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-[#005bb5] hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait">
-                  {isSubmittingAssign
-                    ? <><Loader2 size={16} className="animate-spin" /> Mendaftarkan...</>
-                    : <><UserPlus size={16} /> Daftarkan {assignSelectedNips.length} Pegawai</>}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
