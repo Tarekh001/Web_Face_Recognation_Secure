@@ -121,12 +121,38 @@ const JadwalKegiatan = () => {
   // === API: Fetch OPD list (for invitation multi-select) ===
   const fetchOpdList = useCallback(async () => {
     setIsLoadingOpd(true);
+    const token = localStorage.getItem('access_token');
     try {
-      const res = await axios.get(`${API_BASE}/opd`, getAuthHeaders());
-      setOpdList(Array.isArray(res.data) ? res.data : []);
-    } catch { setOpdList([]); }
-    finally { setIsLoadingOpd(false); }
+      const res = await axios.get(`${API_BASE}/opd`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = res.data?.data || res.data?.opd || res.data;
+      if (Array.isArray(data)) {
+        // Normalize item fields so both nama_opd/nama and kode_opd/kode are available
+        const mapped = data.map(item => ({
+          ...item,
+          nama_opd: item.nama_opd || item.nama || '',
+          kode_opd: item.kode_opd || item.kode || '',
+        }));
+        setOpdList(mapped);
+      } else {
+        console.error("Format data OPD tidak dikenali:", res.data);
+        setOpdList([]);
+      }
+    } catch (err) {
+      console.error('Gagal mengambil daftar OPD:', err);
+      setOpdList([]);
+    } finally {
+      setIsLoadingOpd(false);
+    }
   }, []);
+
+  // Fetch OPD list when creation modal is opened
+  useEffect(() => {
+    if (showForm) {
+      fetchOpdList();
+    }
+  }, [showForm, fetchOpdList]);
 
   // ─────────────────────────────────
   // CREATION MODAL LOGIC
@@ -260,10 +286,12 @@ const JadwalKegiatan = () => {
   };
 
   // === Filtered OPD list ===
-  const filteredOpdList = opdList.filter(o =>
-    o.nama_opd?.toLowerCase().includes(opdSearch.toLowerCase()) ||
-    o.kode_opd?.toLowerCase().includes(opdSearch.toLowerCase())
-  );
+  const filteredOpdList = opdList.filter(o => {
+    const nama = (o.nama_opd || o.nama || '').toLowerCase();
+    const kode = (o.kode_opd || o.kode || '').toLowerCase();
+    const search = opdSearch.toLowerCase();
+    return nama.includes(search) || kode.includes(search);
+  });
 
   // Map position
   const mapPosition = [
@@ -453,113 +481,91 @@ const JadwalKegiatan = () => {
           CREATION MODAL (Global or Internal)
          ══════════════════════════════════════════════ */}
       {showForm && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 overflow-y-auto py-6 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-slate-900/60 backdrop-blur-sm overflow-y-auto py-6 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-3xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-2xl z-10">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white/95 backdrop-blur-md z-10">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2.5">
                 {isSuperAdmin
-                  ? <><Globe size={20} className="text-purple-600" /> Buat Kegiatan Global</>
-                  : <><Building2 size={20} className="text-emerald-600" /> Buat Kegiatan Internal</>}
+                  ? <><div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><Globe size={18} /></div> Buat Kegiatan Global</>
+                  : <><div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><Building2 size={18} /></div> Buat Kegiatan Internal</>}
               </h2>
-              <button onClick={resetForm} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
-                <X size={20} className="text-gray-500" />
+              <button onClick={resetForm} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {/* ── Basic Info ── */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">
                   Nama Kegiatan <span className="text-red-500">*</span>
                 </label>
                 <input type="text" name="nama_kegiatan" value={formData.nama_kegiatan} onChange={handleInputChange}
                   placeholder={isSuperAdmin ? "Contoh: Rapat Koordinasi Lintas OPD" : "Contoh: Rapat Internal Dinas"}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" />
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm text-slate-800 transition-all placeholder:text-slate-400" />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Keterangan</label>
+                <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Keterangan</label>
                 <textarea name="keterangan" value={formData.keterangan} onChange={handleInputChange} rows={2}
                   placeholder="Deskripsi singkat kegiatan..."
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none" />
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm text-slate-800 transition-all placeholder:text-slate-400 resize-none" />
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Tanggal Mulai <span className="text-red-500">*</span></label>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Tanggal Mulai <span className="text-red-500">*</span></label>
                   <input type="date" name="tanggal_mulai" value={formData.tanggal_mulai} onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-600" />
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Tanggal Selesai <span className="text-red-500">*</span></label>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Tanggal Selesai <span className="text-red-500">*</span></label>
                   <input type="date" name="tanggal_selesai" value={formData.tanggal_selesai} onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-600" />
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
                 </div>
               </div>
 
               {/* Time Boundaries */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Jam Mulai</label>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Jam Mulai</label>
                   <input type="time" name="jam_mulai" value={formData.jam_mulai} onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-600" />
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Jam Selesai</label>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Jam Selesai</label>
                   <input type="time" name="jam_selesai" value={formData.jam_selesai} onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-600" />
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
                 </div>
               </div>
 
               {/* ══════════════════════════════
-                  SECTION A: GEOFENCING MAP
+                  SECTION A: GEOFENCING MAP (Compact & Proportional)
                  ══════════════════════════════ */}
-              <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-4 space-y-4">
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin size={14} /> Geofencing — Peta Interaktif
-                </p>
+              <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin size={14} /> Geofencing — Peta Lokasi
+                  </p>
+                  <span className="text-[10px] text-slate-400">Klik / geser pin untuk atur koordinat</span>
+                </div>
 
                 {/* Address + Geocode */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wider">Alamat Lokasi</label>
-                  <div className="flex gap-2">
-                    <input type="text" name="alamat_lokasi" value={formData.alamat_lokasi} onChange={handleInputChange}
-                      placeholder="Contoh: Jl. Raya Serang, Cikupa, Tangerang"
-                      className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                    <button type="button" onClick={handleGeocode} disabled={isGeocoding}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-[#0057A4] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-60 whitespace-nowrap">
-                      {isGeocoding ? <Loader2 size={14} className="animate-spin" /> : <Navigation size={14} />}
-                      Cari di Peta
-                    </button>
-                  </div>
+                <div className="flex gap-2">
+                  <input type="text" name="alamat_lokasi" value={formData.alamat_lokasi} onChange={handleInputChange}
+                    placeholder="Ketik alamat lokasi (contoh: Jl. Raya Serang, Cikupa)..."
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200/80 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                  <button type="button" onClick={handleGeocode} disabled={isGeocoding}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-60 whitespace-nowrap">
+                    {isGeocoding ? <Loader2 size={13} className="animate-spin" /> : <Navigation size={13} />}
+                    Cari Alamat
+                  </button>
                 </div>
 
-                {/* Coordinate Inputs */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wider">Latitude</label>
-                    <input type="number" step="any" name="latitude_target" value={formData.latitude_target}
-                      onChange={handleNumberChange} placeholder="-6.175"
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wider">Longitude</label>
-                    <input type="number" step="any" name="longitude_target" value={formData.longitude_target}
-                      onChange={handleNumberChange} placeholder="106.827"
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wider">Radius (meter)</label>
-                    <input type="number" name="radius_toleransi" value={formData.radius_toleransi}
-                      onChange={handleNumberChange} min={10}
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                  </div>
-                </div>
-
-                {/* Leaflet Map */}
-                <div className="rounded-xl overflow-hidden border border-gray-300 shadow-inner" style={{ height: 300 }}>
+                {/* Leaflet Map - Compact & Proportional */}
+                <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative z-0" style={{ height: 210 }}>
                   <MapContainer center={mapPosition} zoom={15} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
                     <TileLayer
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -572,88 +578,169 @@ const JadwalKegiatan = () => {
                     />
                   </MapContainer>
                 </div>
-                <p className="text-[10px] text-gray-400 italic">Klik pada peta atau geser pin untuk mengubah lokasi.</p>
+
+                {/* Coordinate Inputs */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5 uppercase tracking-wider">Latitude</label>
+                    <input type="number" step="any" name="latitude_target" value={formData.latitude_target}
+                      onChange={handleNumberChange} placeholder="-6.175"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5 uppercase tracking-wider">Longitude</label>
+                    <input type="number" step="any" name="longitude_target" value={formData.longitude_target}
+                      onChange={handleNumberChange} placeholder="106.827"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5 uppercase tracking-wider">Radius (meter)</label>
+                    <input type="number" name="radius_toleransi" value={formData.radius_toleransi}
+                      onChange={handleNumberChange} min={10}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" />
+                  </div>
+                </div>
               </div>
 
               {/* ══════════════════════════════════════
-                  SECTION B: EMPLOYEE ASSIGNMENT
+                  SECTION B: OPD INVITATION & SELECTION
                   (Only for Admin OPD creating Internal)
                  ══════════════════════════════════════ */}
               {!isSuperAdmin && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                <div className="space-y-2.5">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                     Undangan OPD
                   </label>
 
-                  {/* Toggle: Global vs Pilih OPD */}
-                  <div className="flex gap-3 mb-3">
-                    <button type="button" onClick={() => setIsGlobalToggle(true)}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold border transition ${
-                        isGlobalToggle ? 'bg-[#0057A4] text-white border-[#0057A4] shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                      }`}>
-                      <Globe size={16} /> Semua OPD (Global)
+                  {/* Modern Pill Sliding Segmented Control */}
+                  <div className="relative p-1 bg-slate-100 rounded-xl flex items-center border border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={() => setIsGlobalToggle(true)}
+                      className={`relative flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                        isGlobalToggle
+                          ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-900/5'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Globe size={15} className={isGlobalToggle ? 'text-blue-600' : 'text-slate-400'} />
+                      <span>Semua OPD (Global)</span>
                     </button>
-                    <button type="button" onClick={() => setIsGlobalToggle(false)}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold border transition ${
-                        !isGlobalToggle ? 'bg-[#0057A4] text-white border-[#0057A4] shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                      }`}>
-                      <Building2 size={16} /> Pilih OPD Tertentu
+                    <button
+                      type="button"
+                      onClick={() => setIsGlobalToggle(false)}
+                      className={`relative flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                        !isGlobalToggle
+                          ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-900/5'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Building2 size={15} className={!isGlobalToggle ? 'text-blue-600' : 'text-slate-400'} />
+                      <span>Pilih OPD Tertentu</span>
+                      {!isGlobalToggle && selectedOpdIds.length > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded-full">
+                          {selectedOpdIds.length}
+                        </span>
+                      )}
                     </button>
                   </div>
 
-                  {/* OPD Checkbox List */}
+                  {/* OPD Checkbox List with Soft UI */}
                   {!isGlobalToggle && (
-                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="p-3 bg-gray-50 border-b border-gray-200 space-y-2">
+                    <div className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-sm">
+                      <div className="p-3 bg-slate-50/80 border-b border-slate-200/60 space-y-2.5">
                         <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                          <input type="text" placeholder="Cari nama OPD..."
-                            value={opdSearch} onChange={e => setOpdSearch(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                          <input
+                            type="text"
+                            placeholder="Cari nama atau kode OPD..."
+                            value={opdSearch}
+                            onChange={e => setOpdSearch(e.target.value)}
+                            className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-200/80 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          />
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-gray-500">
-                            <span className="font-bold text-blue-600">{selectedOpdIds.length}</span> OPD dipilih
+                        <div className="flex items-center justify-between px-0.5">
+                          <span className="text-[11px] text-slate-500">
+                            Terpilih: <span className="font-bold text-blue-600">{selectedOpdIds.length}</span> dari {filteredOpdList.length} OPD
                           </span>
-                          <div className="flex gap-2">
-                            <button type="button"
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
                               onClick={() => setSelectedOpdIds(filteredOpdList.map(o => o.id))}
-                              className="text-[11px] text-blue-600 hover:underline font-medium">Pilih semua</button>
-                            <span className="text-gray-300">|</span>
-                            <button type="button"
+                              className="text-[11px] text-blue-600 hover:text-blue-700 font-medium transition"
+                            >
+                              Pilih semua
+                            </button>
+                            <span className="text-slate-300">|</span>
+                            <button
+                              type="button"
                               onClick={() => setSelectedOpdIds([])}
-                              className="text-[11px] text-red-500 hover:underline font-medium">Batal semua</button>
+                              className="text-[11px] text-slate-400 hover:text-red-500 font-medium transition"
+                            >
+                              Reset
+                            </button>
                           </div>
                         </div>
                       </div>
-                      <div className="max-h-56 overflow-y-auto">
+
+                      <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
                         {isLoadingOpd ? (
-                          <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
-                            <Loader2 size={18} className="animate-spin" /> Memuat daftar OPD...
+                          <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400">
+                            <Loader2 size={20} className="animate-spin text-blue-500" />
+                            <span className="text-xs">Memuat daftar OPD...</span>
                           </div>
                         ) : filteredOpdList.length > 0 ? (
-                          <table className="w-full text-sm border-collapse">
-                            <thead className="bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wider sticky top-0">
-                              <tr><th className="px-3 py-2 w-8"></th><th className="px-3 py-2 text-left">Nama OPD</th><th className="px-3 py-2 text-left">Kode</th></tr>
+                          <table className="w-full text-xs border-collapse">
+                            <thead className="bg-slate-50/60 text-[10px] font-semibold text-slate-500 uppercase tracking-wider sticky top-0 backdrop-blur-sm z-10">
+                              <tr>
+                                <th className="px-3 py-2 w-10 text-center"></th>
+                                <th className="px-3 py-2 text-left">Nama OPD</th>
+                                <th className="px-3 py-2 text-left w-24">Kode</th>
+                              </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-slate-100">
                               {filteredOpdList.map(o => {
                                 const isSel = selectedOpdIds.includes(o.id);
                                 return (
-                                  <tr key={o.id} onClick={() => handleToggleOpd(o.id)}
-                                    className={`cursor-pointer transition ${isSel ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                                  <tr
+                                    key={o.id}
+                                    onClick={() => handleToggleOpd(o.id)}
+                                    className={`cursor-pointer transition-colors duration-150 ${
+                                      isSel ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-slate-50/70'
+                                    }`}
+                                  >
                                     <td className="px-3 py-2.5 text-center">
-                                      {isSel ? <CheckSquare size={16} className="text-blue-600 mx-auto" /> : <Square size={16} className="text-gray-300 mx-auto" />}
+                                      <div className={`w-4 h-4 rounded flex items-center justify-center mx-auto transition-all ${
+                                        isSel ? 'bg-blue-600 text-white' : 'border border-slate-300 bg-white'
+                                      }`}>
+                                        {isSel && <CheckSquare size={12} className="stroke-[3]" />}
+                                      </div>
                                     </td>
-                                    <td className="px-3 py-2.5 font-medium text-gray-800">{o.nama_opd}</td>
-                                    <td className="px-3 py-2.5 font-mono text-[11px] text-gray-400">{o.kode_opd}</td>
+                                    <td className="px-3 py-2.5">
+                                      <span className={`font-medium ${isSel ? 'text-blue-900 font-semibold' : 'text-slate-700'}`}>
+                                        {o.nama_opd}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {o.kode_opd || '—'}
+                                      </span>
+                                    </td>
                                   </tr>
                                 );
                               })}
                             </tbody>
                           </table>
                         ) : (
-                          <div className="text-center py-8 text-gray-400 text-sm">Tidak ada OPD ditemukan.</div>
+                          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
+                              <Building2 size={20} />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-600">Tidak ada OPD ditemukan</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5 max-w-xs">
+                              {opdSearch ? `Tidak ada hasil pencarian untuk "${opdSearch}"` : 'Data OPD belum tersedia di sistem.'}
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -661,12 +748,14 @@ const JadwalKegiatan = () => {
 
                   {/* Global info */}
                   {isGlobalToggle && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
-                      <ShieldCheck size={20} className="text-purple-600 shrink-0 mt-0.5" />
+                    <div className="bg-purple-50/80 border border-purple-200/80 rounded-xl p-3.5 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                        <ShieldCheck size={18} />
+                      </div>
                       <div>
-                        <p className="text-sm font-semibold text-purple-800">Kegiatan Global (Seluruh OPD)</p>
-                        <p className="text-xs text-purple-600 mt-0.5">
-                          Semua ASN dari seluruh OPD dapat melakukan presensi pada kegiatan ini.
+                        <p className="text-xs font-bold text-purple-900">Kegiatan Global (Seluruh OPD)</p>
+                        <p className="text-[11px] text-purple-700 mt-0.5 leading-relaxed">
+                          Semua ASN dari seluruh OPD terdaftar di sistem dapat melakukan presensi pada kegiatan ini.
                         </p>
                       </div>
                     </div>
@@ -674,13 +763,15 @@ const JadwalKegiatan = () => {
                 </div>
               )}
 
-              {/* Submit */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button type="button" onClick={resetForm}
-                  className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Batal</button>
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all">
+                  Batal
+                </button>
                 <button type="submit" disabled={isSubmitting}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-[#005bb5] hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait">
-                  {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Menyimpan...</> : <><Plus size={16} /> Simpan Kegiatan</>}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-xl font-semibold transition-all shadow-sm hover:shadow active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait">
+                  {isSubmitting ? <><Loader2 size={14} className="animate-spin" /> Menyimpan...</> : <><Plus size={14} /> Simpan Kegiatan</>}
                 </button>
               </div>
             </form>

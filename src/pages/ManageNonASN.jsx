@@ -108,7 +108,7 @@ const EditUserModal = ({ user, opdList, onClose, onSaved }) => {
 // ==========================================
 // MAIN: ManageASN Page
 // ==========================================
-const ManageASN = () => {
+const ManageNonASN = () => {
   const [asnList, setAsnList] = useState([]);
   const [opdList, setOpdList] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,7 +119,7 @@ const ManageASN = () => {
 
   const fetchASNData = async () => {
     const token = localStorage.getItem('access_token');
-    try { const res = await axios.get(`${API_BASE}/manage-asn`, { params: { role: 'asn' }, headers: { Authorization: `Bearer ${token}` } }); setAsnList(res.data); }
+    try { const res = await axios.get(`${API_BASE}/manage-asn`, { params: { role: 'non_asn' }, headers: { Authorization: `Bearer ${token}` } }); setAsnList(res.data); }
     catch { console.error("Gagal mengambil data ASN"); }
   };
   const fetchOPDList = async () => {
@@ -293,4 +293,4 @@ const ManageASN = () => {
   );
 };
 
-export default ManageASN;
+export default ManageNonASN;

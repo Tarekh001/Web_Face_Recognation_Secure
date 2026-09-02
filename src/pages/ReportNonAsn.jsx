@@ -3,10 +3,10 @@ import axios from 'axios';
 import { 
   Download, Search, Calendar, ChevronLeft, ChevronRight, 
   Filter, Clock, MapPin, CheckCircle2, AlertCircle, XCircle,
-  FileSpreadsheet, Users, RotateCcw, CalendarDays
+  FileSpreadsheet, Users, RotateCcw
 } from 'lucide-react';
 
-const Dashboard = () => {
+const ReportNonAsn = () => {
   const [reports, setReports] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -18,25 +18,23 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [isExporting, setIsExporting] = useState(false);
-  const [kegiatanList, setKegiatanList] = useState([]);
-  const [selectedKegiatanId, setSelectedKegiatanId] = useState('');
-  const [roleFilter, setRoleFilter] = useState(''); // '', 'asn', 'non_asn'
 
   const fetchReports = useCallback(async () => {
     const token = localStorage.getItem('access_token');
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.append('page', currentPage);
-      params.append('limit', itemsPerPage);
-      if (searchQuery) params.append('search_name', searchQuery);
-      if (startDate) params.append('start_date', startDate);
-      if (endDate) params.append('end_date', endDate);
-      if (statusFilter) params.append('status_filter', statusFilter);
-      if (selectedKegiatanId) params.append('kegiatan_id', selectedKegiatanId);
-      if (roleFilter) params.append('role', roleFilter);
+      const params = {
+        page: currentPage,
+        limit: itemsPerPage,
+        role: 'non_asn',
+      };
+      if (searchQuery) params.search_name = searchQuery;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (statusFilter) params.status_filter = statusFilter;
 
-      const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
+      const res = await axios.get('http://127.0.0.1:5000/api/report', {
+        params,
         headers: { Authorization: `Bearer ${token}` }
       });
       if (Array.isArray(res.data)) {
@@ -51,7 +49,7 @@ const Dashboard = () => {
     } finally { 
       setIsLoading(false); 
     }
-  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter, selectedKegiatanId, roleFilter]);
+  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter]);
 
   useEffect(() => {
     fetchReports();
@@ -59,13 +57,7 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchReports]);
 
-  useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    axios.get('http://127.0.0.1:5000/api/kegiatan', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => setKegiatanList(Array.isArray(res.data) ? res.data : res.data.data || []))
-      .catch(() => {});
-  }, []);
-
+  // Quick stats derived from loaded records
   const stats = useMemo(() => {
     let onTime = 0, late = 0, absent = 0;
     reports.forEach(r => {
@@ -77,11 +69,7 @@ const Dashboard = () => {
   }, [reports]);
 
   const handleFilterChange = (setter) => (e) => { setter(e.target.value); setCurrentPage(1); };
-  const handleResetFilters = () => { 
-    setSearchQuery(''); setStartDate(''); setEndDate(''); 
-    setStatusFilter(''); setSelectedKegiatanId(''); setRoleFilter(''); 
-    setCurrentPage(1); 
-  };
+  const handleResetFilters = () => { setSearchQuery(''); setStartDate(''); setEndDate(''); setStatusFilter(''); setCurrentPage(1); };
   const handleItemsPerPageChange = (e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); };
 
   const handleExportCSV = async () => {
@@ -89,33 +77,33 @@ const Dashboard = () => {
     setIsExporting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const params = new URLSearchParams();
-      params.append('page', 1);
-      params.append('limit', 99999);
-      if (searchQuery) params.append('search_name', searchQuery);
-      if (startDate) params.append('start_date', startDate);
-      if (endDate) params.append('end_date', endDate);
-      if (statusFilter) params.append('status_filter', statusFilter);
-      if (selectedKegiatanId) params.append('kegiatan_id', selectedKegiatanId);
-      if (roleFilter) params.append('role', roleFilter);
+      const params = {
+        page: 1,
+        limit: 99999,
+        role: 'non_asn',
+      };
+      if (searchQuery) params.search_name = searchQuery;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (statusFilter) params.status_filter = statusFilter;
 
-      const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
+      const res = await axios.get('http://127.0.0.1:5000/api/report', {
+        params,
         headers: { Authorization: `Bearer ${token}` }
       });
       const allData = Array.isArray(res.data) ? res.data : (res.data.data || []);
 
       if (allData.length === 0) return alert('Tidak ada data untuk di-export');
 
-      let csv = 'NIP/NIK,Tipe,Nama,Tanggal,Jam Masuk,Status Masuk,Keterlambatan,Jam Keluar,Status Keluar,Lokasi\n';
+      let csv = 'NIK,Tipe,Nama,Tanggal,Jam Masuk,Status Masuk,Keterlambatan,Jam Keluar,Status Keluar,Lokasi\n';
       allData.forEach(r => {
         const ket = r.status_masuk === 'LATE' && r.keterlambatan_menit > 0 ? `Terlambat ${r.keterlambatan_menit} Menit` : 'Tepat Waktu';
-        const tipe = r.role === 'non_asn' ? 'Non-ASN' : 'ASN';
-        csv += `${r.nip},${tipe},"${r.nama}",${r.tanggal},${r.jam_masuk || '-'},${r.status_masuk === 'ABSENT' ? 'Tidak Hadir' : ket},${r.keterlambatan_menit || 0},${r.jam_keluar || '-'},${r.status_keluar || '-'},"${r.nama_lokasi || r.device_sn || '-'}"\n`;
+        csv += `${r.nip},Non-ASN,"${r.nama}",${r.tanggal},${r.jam_masuk || '-'},${r.status_masuk === 'ABSENT' ? 'Tidak Hadir' : ket},${r.keterlambatan_menit || 0},${r.jam_keluar || '-'},${r.status_keluar || '-'},"${r.nama_lokasi || r.device_sn || '-'}"\n`;
       });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', `Laporan_Presensi_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `Laporan_Presensi_Non_ASN_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
     } catch (err) { 
       alert('Gagal export: ' + (err.response?.data?.error || err.message)); 
@@ -149,21 +137,21 @@ const Dashboard = () => {
     }
   };
 
-  const hasActiveFilters = searchQuery || startDate || endDate || statusFilter || selectedKegiatanId || roleFilter;
+  const hasActiveFilters = searchQuery || startDate || endDate || statusFilter;
 
   return (
     <div className="space-y-6">
       
-      {/* ── BENTO HEADER & METRICS ── */}
+      {/* ── BENTO HEADER & METRIC SUMMARY ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* Metric 1 */}
+        {/* Metric 1: Title & Total */}
         <div className="sm:col-span-2 lg:col-span-1 glass-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Total Log Presensi
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
+              Total Rekap Non-ASN
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
               <Users size={16} />
             </div>
           </div>
@@ -171,11 +159,11 @@ const Dashboard = () => {
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
               {totalItems.toLocaleString('id-ID')}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Seluruh ASN & Non-ASN</p>
+            <p className="text-xs text-slate-500 mt-0.5">Pegawai honorer & tenaga teknis</p>
           </div>
         </div>
 
-        {/* Metric 2 */}
+        {/* Metric 2: Tepat Waktu */}
         <div className="glass-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
@@ -189,11 +177,11 @@ const Dashboard = () => {
             <p className="text-2xl font-extrabold text-emerald-700">
               {stats.onTime} <span className="text-xs font-normal text-slate-400">di halaman ini</span>
             </p>
-            <p className="text-xs text-emerald-600/80 mt-0.5 font-medium">Hadir tepat waktu</p>
+            <p className="text-xs text-emerald-600/80 mt-0.5 font-medium">Presensi tepat waktu</p>
           </div>
         </div>
 
-        {/* Metric 3 */}
+        {/* Metric 3: Terlambat */}
         <div className="glass-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-red-600">
@@ -207,11 +195,11 @@ const Dashboard = () => {
             <p className="text-2xl font-extrabold text-red-600">
               {stats.late} <span className="text-xs font-normal text-slate-400">di halaman ini</span>
             </p>
-            <p className="text-xs text-red-500/80 mt-0.5 font-medium">Lewat batas toleransi</p>
+            <p className="text-xs text-red-500/80 mt-0.5 font-medium">Perlu evaluasi absensi</p>
           </div>
         </div>
 
-        {/* Metric 4 */}
+        {/* Metric 4: Tidak Hadir */}
         <div className="glass-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
@@ -225,7 +213,7 @@ const Dashboard = () => {
             <p className="text-2xl font-extrabold text-slate-700">
               {stats.absent} <span className="text-xs font-normal text-slate-400">di halaman ini</span>
             </p>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">Tanpa riwayat tap/scan</p>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">Tanpa scan presensi</p>
           </div>
         </div>
 
@@ -236,7 +224,7 @@ const Dashboard = () => {
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
           
           {/* Filters Form Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 flex-1">
             
             {/* Search */}
             <div>
@@ -247,7 +235,7 @@ const Dashboard = () => {
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input 
                   type="text" 
-                  placeholder="Cari NIP/Nama..." 
+                  placeholder="Cari NIK atau Nama..." 
                   value={searchQuery} 
                   onChange={handleFilterChange(setSearchQuery)}
                   className="w-full pl-10 pr-3.5 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs" 
@@ -290,7 +278,7 @@ const Dashboard = () => {
             {/* Status Filter */}
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Status
+                Status Kehadiran
               </label>
               <div className="relative">
                 <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -303,47 +291,6 @@ const Dashboard = () => {
                   <option value="ON_TIME">Tepat Waktu</option>
                   <option value="LATE">Terlambat</option>
                   <option value="ABSENT">Tidak Hadir</option>
-                </select>
-                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={16} />
-              </div>
-            </div>
-
-            {/* Kegiatan Filter */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Kegiatan
-              </label>
-              <div className="relative">
-                <CalendarDays className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <select 
-                  value={selectedKegiatanId} 
-                  onChange={handleFilterChange(setSelectedKegiatanId)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
-                >
-                  <option value="">Presensi Reguler</option>
-                  {kegiatanList.map(k => (
-                    <option key={k.id} value={k.id}>{k.nama_kegiatan}</option>
-                  ))}
-                </select>
-                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={16} />
-              </div>
-            </div>
-
-            {/* Tipe Pegawai (Role) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Tipe Pegawai
-              </label>
-              <div className="relative">
-                <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <select 
-                  value={roleFilter} 
-                  onChange={handleFilterChange(setRoleFilter)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
-                >
-                  <option value="">Semua Tipe</option>
-                  <option value="asn">ASN</option>
-                  <option value="non_asn">Non-ASN</option>
                 </select>
                 <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={16} />
               </div>
@@ -392,7 +339,7 @@ const Dashboard = () => {
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
                 <th className="px-5 py-4 w-12 text-center">#</th>
-                <th className="px-5 py-4">Pegawai</th>
+                <th className="px-5 py-4">Pegawai Non-ASN</th>
                 <th className="px-5 py-4">Tanggal</th>
                 <th className="px-5 py-4 text-center">
                   <div className="flex items-center justify-center gap-1.5">
@@ -423,7 +370,7 @@ const Dashboard = () => {
                   <td colSpan="9" className="text-center py-20">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-9 h-9 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin"/>
-                      <span className="text-slate-400 text-sm font-medium">Memuat data presensi...</span>
+                      <span className="text-slate-400 text-sm font-medium">Memuat data presensi Non-ASN...</span>
                     </div>
                   </td>
                 </tr>
@@ -432,18 +379,17 @@ const Dashboard = () => {
                   const isAbsent = row.status_masuk === 'ABSENT';
                   const isLate = row.status_masuk === 'LATE';
                   const isCheckedOut = Boolean(row.jam_keluar);
-                  const isNonAsn = row.role === 'non_asn';
 
                   return (
                     <tr 
                       key={`${row.nip}-${row.tanggal}-${idx}`} 
-                      className={`hover:bg-blue-50/30 transition-colors ${isNonAsn ? 'hover:bg-amber-50/20' : ''}`}
+                      className="hover:bg-amber-50/30 transition-colors"
                     >
                       <td className="px-5 py-4 text-center text-xs font-mono text-slate-400">
                         {(currentPage - 1) * itemsPerPage + idx + 1}
                       </td>
 
-                      {/* Identitas */}
+                      {/* Identitas Non-ASN */}
                       <td className="px-5 py-4">
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-900 text-sm leading-snug">
@@ -453,12 +399,8 @@ const Dashboard = () => {
                             <span className="font-mono text-xs text-slate-500 font-medium tracking-tight">
                               {row.nip}
                             </span>
-                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold ring-1 ${
-                              isNonAsn 
-                                ? 'bg-amber-50 text-amber-700 ring-amber-200' 
-                                : 'bg-blue-50 text-blue-700 ring-blue-200'
-                            }`}>
-                              {isNonAsn ? 'Non-ASN' : 'ASN'}
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+                              Non-ASN
                             </span>
                           </div>
                         </div>
@@ -562,7 +504,7 @@ const Dashboard = () => {
                       </div>
                       <p className="text-slate-700 font-bold text-base">Tidak ada data presensi ditemukan</p>
                       <p className="text-slate-400 text-xs max-w-sm">
-                        Coba sesuaikan tanggal atau kriteria filter untuk melihat data presensi lainnya.
+                        Coba sesuaikan tanggal atau kriteria pencarian untuk melihat data presensi lainnya.
                       </p>
                       {hasActiveFilters && (
                         <button 
@@ -645,4 +587,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default ReportNonAsn;

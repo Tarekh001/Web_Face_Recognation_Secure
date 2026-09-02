@@ -8,9 +8,10 @@ const RegisterUser = () => {
     const webcamRef = useRef(null);
     const [capturedPhotos, setCapturedPhotos] = useState([]);
     const [formData, setFormData] = useState({ nip: '', nama: '', opd_id: '' });
-    const [opdList, setOpdList] = useState([]); // State untuk daftar OPD
+    const [opdList, setOpdList] = useState([]);
     const [isModelsLoaded, setIsModelsLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [regMode, setRegMode] = useState('ASN'); // 'ASN' or 'NON_ASN'
 
     // Daftar Pose yang Dibutuhkan
     const requiredPoses = [
@@ -88,8 +89,16 @@ const RegisterUser = () => {
     };
 
     const handleRegister = async () => {
-        if (!formData.nip || !formData.nama || !formData.opd_id) {
-            alert("NIP, Nama, dan OPD wajib diisi terlebih dahulu!");
+        const isNonAsn = regMode === 'NON_ASN';
+        const expectedLen = isNonAsn ? 16 : 18;
+        const idLabel = isNonAsn ? 'NIK' : 'NIP';
+
+        if (!formData.nip || formData.nip.length !== expectedLen) {
+            alert(`${idLabel} harus ${expectedLen} digit angka!`);
+            return;
+        }
+        if (!formData.nama || !formData.opd_id) {
+            alert(`${idLabel}, Nama, dan OPD wajib diisi terlebih dahulu!`);
             return;
         }
 
@@ -99,6 +108,7 @@ const RegisterUser = () => {
         data.append('nip', formData.nip);
         data.append('name', formData.nama);
         data.append('opd_id', formData.opd_id);
+        data.append('role', regMode);
         data.append('source', 'web');
         
         capturedPhotos.forEach((blob, i) => data.append('photos', blob, `face_${i}.jpg`));
@@ -110,9 +120,9 @@ const RegisterUser = () => {
                     'Content-Type': 'multipart/form-data'
                 }
             });
-            alert("✅ Data ASN Berhasil Didaftarkan!");
+            alert(isNonAsn ? "✅ Data Non-ASN Berhasil Didaftarkan!" : "✅ Data ASN Berhasil Didaftarkan!");
             setCapturedPhotos([]);
-            setFormData({ nip: '', nama: '' });
+            setFormData({ nip: '', nama: '', opd_id: formData.opd_id });
         } catch (err) {
             alert("❌ Gagal daftar: " + (err.response?.data?.error || "Terjadi kesalahan server"));
         } finally {
@@ -125,16 +135,53 @@ const RegisterUser = () => {
     return (
         <main className="p-8 w-full h-full bg-[#f4f7f6] overflow-y-auto">
             <div className="mb-6 border-b-2 border-gray-300 pb-4">
-                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Registrasi Wajah ASN</h1>
-                <p className="text-gray-500 mt-1">Daftarkan data biometrik pegawai baru ke dalam sistem</p>
+                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Registrasi Wajah {regMode === 'ASN' ? 'ASN' : 'Non-ASN'}</h1>
+                <p className="text-gray-500 mt-1">Daftarkan data biometrik {regMode === 'ASN' ? 'pegawai' : 'tenaga non-ASN'} baru ke dalam sistem</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">                
                 <div className="lg:col-span-5 flex flex-col gap-6">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                         <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                            <User size={20} className="text-blue-500" /> Identitas ASN
+                            <User size={20} className="text-blue-500" /> Identitas {regMode === 'ASN' ? 'ASN' : 'Non-ASN'}
                         </h2>
+
+                        {/* Mode Toggle */}
+                        <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
+                            <button
+                                type="button"
+                                onClick={() => { setRegMode('ASN'); setFormData(p => ({...p, nip: ''})); setCapturedPhotos([]); }}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-semibold transition-all ${
+                                    regMode === 'ASN'
+                                        ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-200'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                                ASN (NIP)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setRegMode('NON_ASN'); setFormData(p => ({...p, nip: ''})); setCapturedPhotos([]); }}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-semibold transition-all ${
+                                    regMode === 'NON_ASN'
+                                        ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                                Non-ASN (NIK)
+                            </button>
+                        </div>
+
+                        {/* Non-ASN Info Banner */}
+                        {regMode === 'NON_ASN' && (
+                            <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                                <p className="text-xs text-amber-800 leading-relaxed">
+                                    <strong>Mode Non-ASN:</strong> Tenaga Ahli, Honorer, Magang, dll. Data <strong>tidak</strong> divalidasi terhadap Data Induk Pegawai. Gunakan NIK (16 digit).
+                                </p>
+                            </div>
+                        )}
+
                         <div className="flex flex-col gap-4">
                             <div>
                                 <label className="block text-sm font-semibold text-gray-600 mb-1">Pilih Instansi (OPD)</label>
@@ -152,14 +199,23 @@ const RegisterUser = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-600 mb-1">Nomor Induk Pegawai (NIP)</label>
+                                <label className="block text-sm font-semibold text-gray-600 mb-1">
+                                    {regMode === 'ASN' ? 'Nomor Induk Pegawai (NIP)' : 'Nomor Induk Kependudukan (NIK)'}
+                                </label>
                                 <input 
                                     type="text" 
-                                    placeholder="Masukkan NIP (Contoh: 1980...)" 
+                                    placeholder={regMode === 'ASN' ? 'Masukkan NIP (18 digit)' : 'Masukkan NIK (16 digit)'}
+                                    maxLength={regMode === 'ASN' ? 18 : 16}
                                     value={formData.nip}
-                                    onChange={e => setFormData({...formData, nip: e.target.value})} 
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                                    onChange={e => {
+                                        const val = e.target.value.replace(/\D/g, '');
+                                        setFormData({...formData, nip: val});
+                                    }}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition font-mono tracking-wider"
                                 />
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                    {formData.nip.length}/{regMode === 'ASN' ? 18 : 16} digit
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-600 mb-1">Nama Lengkap</label>

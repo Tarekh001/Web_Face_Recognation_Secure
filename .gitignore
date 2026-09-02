@@ -10,7 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.qoder\repowiki
 *.local
+.agents/skills/
+.agents/tools/
+.agents/agent.json
+.agents/index.js
 
 # Editor directories and files
 .vscode/*
