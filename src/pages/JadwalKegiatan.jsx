@@ -123,18 +123,13 @@ const JadwalKegiatan = () => {
     setIsLoadingOpd(true);
     const token = localStorage.getItem('access_token');
     try {
-      const res = await axios.get(`${API_BASE}/opd`, {
+      const res = await axios.get(`${API_BASE}/opd?scope=global`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const data = res.data?.data || res.data?.opd || res.data;
+      // scope=global returns consistent { id, nama_opd, kode_opd }
+      const data = res.data?.data || res.data;
       if (Array.isArray(data)) {
-        // Normalize item fields so both nama_opd/nama and kode_opd/kode are available
-        const mapped = data.map(item => ({
-          ...item,
-          nama_opd: item.nama_opd || item.nama || '',
-          kode_opd: item.kode_opd || item.kode || '',
-        }));
-        setOpdList(mapped);
+        setOpdList(data);
       } else {
         console.error("Format data OPD tidak dikenali:", res.data);
         setOpdList([]);
