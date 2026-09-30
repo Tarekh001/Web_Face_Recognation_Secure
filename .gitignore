@@ -1,3 +1,9 @@
+# Environment variables (jangan pernah push ke Git!)
+.env
+.env.local
+.env.production
+.env.*.local
+
 # Logs
 logs
 *.log
