@@ -1,8 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { MonitorSmartphone, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X, Info, Unlink, Search, Shield, ShieldOff } from 'lucide-react';
-
-const API = 'http://127.0.0.1:5000/api';
+import API_BASE from '../config/api';
+import {
+  MonitorSmartphone,
+  CheckCircle,
+  XCircle,
+  Pencil,
+  Trash2,
+  X,
+  Info,
+  Unlink,
+  Search,
+  Shield,
+  ShieldOff,
+} from 'lucide-react';
 
 const DevicePage = () => {
   const [devices, setDevices] = useState([]);
@@ -14,11 +25,12 @@ const DevicePage = () => {
   const filteredDevices = useMemo(() => {
     if (!searchQuery.trim()) return devices;
     const q = searchQuery.toLowerCase();
-    return devices.filter(d =>
-      (d.sn || '').toLowerCase().includes(q) ||
-      (d.lokasi || '').toLowerCase().includes(q) ||
-      (d.device_name || '').toLowerCase().includes(q) ||
-      (d.opd || '').toLowerCase().includes(q)
+    return devices.filter(
+      (d) =>
+        (d.sn || '').toLowerCase().includes(q) ||
+        (d.lokasi || '').toLowerCase().includes(q) ||
+        (d.device_name || '').toLowerCase().includes(q) ||
+        (d.opd || '').toLowerCase().includes(q)
     );
   }, [devices, searchQuery]);
 
@@ -28,45 +40,63 @@ const DevicePage = () => {
   const fetchData = async () => {
     try {
       const [resDev, resOpd] = await Promise.all([
-        axios.get(`${API}/devices`, { headers }),
-        axios.get(`${API}/opd`, { headers }),
+        axios.get(`${API_BASE}/devices`, { headers }),
+        axios.get(`${API_BASE}/opd`, { headers }),
       ]);
-      setDevices(resDev.data);
-      setOpds(resOpd.data);
-    } catch (err) { console.error('Gagal mengambil data device', err); }
+      setDevices(Array.isArray(resDev.data) ? resDev.data : []);
+      setOpds(Array.isArray(resOpd.data) ? resOpd.data : []);
+    } catch (err) {
+      console.error('Gagal mengambil data device', err);
+    }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleUnbind = async (sn) => {
-    if (!confirm(`Yakin ingin melepas perangkat "${sn}" dari instansi?\n\nPerangkat akan ter-logout otomatis dari kiosk.`)) return;
+    if (
+      !confirm(
+        `Yakin ingin melepas perangkat "${sn}" dari instansi?\n\nPerangkat akan ter-logout otomatis dari kiosk.`
+      )
+    )
+      return;
     setIsLoading(true);
     try {
-      const res = await axios.put(`${API}/devices/${sn}/unbind`, {}, { headers });
+      const res = await axios.put(`${API_BASE}/devices/${sn}/unbind`, {}, { headers });
       alert(res.data.message || 'Device berhasil dilepas!');
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || 'Gagal melepas device');
-    } finally { setIsLoading(false); }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleUpdate = async () => {
     if (!editModal) return;
     setIsLoading(true);
     try {
-      await axios.put(`${API}/devices/${editModal.sn}`, editModal, { headers });
+      await axios.put(`${API_BASE}/devices/${editModal.sn}`, editModal, { headers });
       alert('Device berhasil diperbarui!');
       setEditModal(null);
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || 'Gagal memperbarui device');
-    } finally { setIsLoading(false); }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDelete = async (sn) => {
-    if (!confirm(`Yakin ingin HAPUS PERMANEN Device "${sn}"?\n\nData presensi terkait akan terhapus.`)) return;
+    if (
+      !confirm(
+        `Yakin ingin HAPUS PERMANEN Device "${sn}"?\n\nData presensi terkait akan terhapus.`
+      )
+    )
+      return;
     try {
-      await axios.delete(`${API}/devices/${sn}`, { headers });
+      await axios.delete(`${API_BASE}/devices/${sn}`, { headers });
       alert(`Device "${sn}" berhasil dihapus!`);
       fetchData();
     } catch (err) {
@@ -74,79 +104,175 @@ const DevicePage = () => {
     }
   };
 
+  const activeCount = devices.filter((d) => d.verified).length;
+
   return (
-    <div className="p-8 w-full max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-2"><MonitorSmartphone size={24} /> Data Perangkat</h1>
-          <p className="text-gray-500 text-sm mt-1">Daftar mesin kiosk yang terdaftar di sistem</p>
+    <div className="space-y-5 max-w-7xl mx-auto">
+      {/* Top Header Card */}
+      <div className="glass-card p-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+            <MonitorSmartphone size={20} />
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900">
+              Konfigurasi Mesin Kiosk ({devices.length})
+            </h2>
+            <p className="text-xs text-slate-500">
+              Pemantauan perangkat terminal biometrik, status ikatan OPD, dan proteksi Anti-Spoofing
+            </p>
+          </div>
+        </div>
+        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200/80 text-xs font-bold text-emerald-700">
+          <CheckCircle size={15} />
+          <span>{activeCount} Mesin Terverifikasi</span>
         </div>
       </div>
 
       {/* Info Banner */}
-      <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3 mb-6">
+      <div className="bg-blue-50/80 border border-blue-200/80 p-4 rounded-2xl flex items-start gap-3">
         <Info size={18} className="text-blue-600 mt-0.5 shrink-0" />
-        <p className="text-xs text-blue-700">Perangkat didaftarkan otomatis saat Admin login di Kiosk Mobile. Gunakan <b>Unbind</b> untuk melepas perangkat dari instansi (perangkat perlu aktivasi ulang).</p>
+        <p className="text-xs text-blue-800 leading-relaxed">
+          Perangkat didaftarkan otomatis saat Admin login pertama kali pada aplikasi Kiosk Mobile.
+          Gunakan tombol <b>Unbind</b> untuk melepas perangkat dari instansi (perangkat akan meminta
+          aktivasi ulang).
+        </p>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-          <div className="relative w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input type="text" placeholder="Cari SN, Lokasi, atau Nama Device..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" />
+      {/* Search + Table */}
+      <div className="glass-card overflow-hidden">
+        <div className="p-4 sm:px-6 border-b border-slate-200/80 bg-white/60 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Cari SN, Lokasi, Nama Device, atau OPD..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+            />
           </div>
+          <span className="text-xs font-semibold text-slate-500">
+            Menampilkan <b className="text-slate-800">{filteredDevices.length}</b> perangkat
+          </span>
         </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm min-w-[950px]">
+          <table className="w-full text-left text-sm border-collapse min-w-[960px]">
             <thead>
-              <tr className="bg-gray-50 text-gray-600">
-                <th className="p-4 border-b font-semibold whitespace-nowrap">SN Mesin</th>
-                <th className="p-4 border-b font-semibold">Instansi (OPD)</th>
-                <th className="p-4 border-b font-semibold">Lokasi</th>
-                <th className="p-4 border-b font-semibold">Status</th>
-                <th className="p-4 border-b font-semibold">Terdaftar Oleh</th>
-                <th className="p-4 border-b font-semibold whitespace-nowrap">Terakhir Aktif</th>
-                <th className="p-4 border-b font-semibold text-center">Anti-Spoof</th>
-                <th className="p-4 border-b font-semibold text-center w-40 sticky right-0 bg-gray-50">Aksi</th>
+              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+                <th className="px-4 py-3.5 whitespace-nowrap">SN Mesin</th>
+                <th className="px-4 py-3.5">Instansi (OPD)</th>
+                <th className="px-4 py-3.5">Lokasi Penempatan</th>
+                <th className="px-4 py-3.5">Status</th>
+                <th className="px-4 py-3.5">Terdaftar Oleh</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Terakhir Aktif</th>
+                <th className="px-4 py-3.5 text-center">Anti-Spoof</th>
+                <th className="px-4 py-3.5 text-center w-40 sticky right-0 bg-slate-50/95">Aksi</th>
               </tr>
             </thead>
-            <tbody>
-              {filteredDevices.map(d => (
-                <tr key={d.sn} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
-                  <td className="p-4 whitespace-nowrap">
-                    <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{d.sn}</span>
-                    {d.device_name && <div className="text-[10px] text-gray-400 mt-1">{d.device_name}</div>}
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {filteredDevices.map((d) => (
+                <tr key={d.sn} className="hover:bg-blue-50/30 transition-colors">
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/80">
+                      {d.sn}
+                    </span>
+                    {d.device_name && (
+                      <div className="text-[11px] text-slate-400 mt-1 font-medium">{d.device_name}</div>
+                    )}
                   </td>
-                  <td className="p-4 font-semibold text-gray-700">{d.opd || <span className="text-gray-400 italic">Tidak terikat</span>}</td>
-                  <td className="p-4 text-gray-600">{d.lokasi || '-'}</td>
-                  <td className="p-4">
-                    {d.verified
-                      ? <span className="flex items-center gap-1 text-green-600 font-semibold text-xs"><CheckCircle size={14} /> Aktif</span>
-                      : <span className="flex items-center gap-1 text-red-500 font-semibold text-xs"><XCircle size={14} /> Nonaktif</span>}
+                  <td className="px-4 py-3.5 font-semibold text-slate-800">
+                    {d.opd || <span className="text-slate-400 italic font-normal">Tidak terikat</span>}
                   </td>
-                  <td className="p-4">{d.registered_by_name ? <span className="text-xs font-medium text-gray-700">{d.registered_by_name}</span> : <span className="text-gray-400 text-xs">—</span>}</td>
-                  <td className="p-4 text-xs text-gray-500 whitespace-nowrap">{d.last_activity || 'Belum pernah'}</td>
-                  <td className="p-4 text-center">
-                    {(d.anti_spoofing_enabled !== false)
-                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 ring-1 ring-green-200" title="Anti-Spoofing aktif"><Shield size={12} /> Aktif</span>
-                      : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-200" title="Anti-Spoofing dinonaktifkan"><ShieldOff size={12} /> Off</span>}
+                  <td className="px-4 py-3.5 text-slate-600 text-xs">{d.lokasi || '—'}</td>
+                  <td className="px-4 py-3.5">
+                    {d.verified ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 font-bold text-[11px]">
+                        <CheckCircle size={13} /> Aktif
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 font-bold text-[11px]">
+                        <XCircle size={13} /> Nonaktif
+                      </span>
+                    )}
                   </td>
-                  <td className="p-4 text-center sticky right-0 bg-white">
-                    <div className="flex justify-center gap-1">
+                  <td className="px-4 py-3.5">
+                    {d.registered_by_name ? (
+                      <span className="text-xs font-semibold text-slate-700">{d.registered_by_name}</span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap font-mono">
+                    {d.last_activity || 'Belum pernah'}
+                  </td>
+                  <td className="px-4 py-3.5 text-center">
+                    {d.anti_spoofing_enabled !== false ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                        title="Anti-Spoofing aktif"
+                      >
+                        <Shield size={12} /> Aktif
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                        title="Anti-Spoofing dinonaktifkan"
+                      >
+                        <ShieldOff size={12} /> Off
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5 text-center sticky right-0 bg-white/95">
+                    <div className="flex justify-center items-center gap-1">
                       {d.verified && d.opd && (
-                        <button onClick={() => handleUnbind(d.sn)} disabled={isLoading}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition" title="Lepas ikatan">
-                          <Unlink size={13} /> Unbind
+                        <button
+                          type="button"
+                          onClick={() => handleUnbind(d.sn)}
+                          disabled={isLoading}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200 rounded-xl transition cursor-pointer"
+                          title="Lepas ikatan OPD"
+                        >
+                          <Unlink size={12} /> Unbind
                         </button>
                       )}
-                      <button onClick={() => setEditModal({ sn: d.sn, name: d.name || '', nama_lokasi: d.lokasi || '', opd_id: d.opd_id || '', verified: d.verified, anti_spoofing_enabled: d.anti_spoofing_enabled !== false })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
-                      <button onClick={() => handleDelete(d.sn)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus Permanen"><Trash2 size={15} /></button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditModal({
+                            sn: d.sn,
+                            name: d.name || '',
+                            nama_lokasi: d.lokasi || '',
+                            opd_id: d.opd_id || '',
+                            verified: d.verified,
+                            anti_spoofing_enabled: d.anti_spoofing_enabled !== false,
+                          })
+                        }
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition cursor-pointer"
+                        title="Edit Perangkat"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(d.sn)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                        title="Hapus Permanen"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {filteredDevices.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada perangkat terdaftar.'}</td></tr>}
+              {filteredDevices.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-slate-400 text-sm">
+                    {searchQuery ? 'Perangkat tidak ditemukan.' : 'Belum ada perangkat terdaftar.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -154,82 +280,152 @@ const DevicePage = () => {
 
       {/* Edit Modal */}
       {editModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditModal(null)}>
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Edit Device — <span className="font-mono text-blue-600">{editModal.sn}</span></h3>
-              <button onClick={() => setEditModal(null)} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setEditModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-6 w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center pb-4 mb-5 border-b border-slate-100">
+              <h3 className="text-base font-extrabold text-slate-900">
+                Edit Perangkat — <span className="font-mono text-blue-600">{editModal.sn}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-gray-500 mb-1 block">Nama Device</label>
-                <input type="text" value={editModal.name} onChange={e => setEditModal({...editModal, name: e.target.value})} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 block">
+                  Nama Perangkat
+                </label>
+                <input
+                  type="text"
+                  value={editModal.name}
+                  onChange={(e) => setEditModal({ ...editModal, name: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none text-sm"
+                />
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-500 mb-1 block">Lokasi</label>
-                <input type="text" value={editModal.nama_lokasi} onChange={e => setEditModal({...editModal, nama_lokasi: e.target.value})} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 block">
+                  Lokasi Penempatan
+                </label>
+                <input
+                  type="text"
+                  value={editModal.nama_lokasi}
+                  onChange={(e) => setEditModal({ ...editModal, nama_lokasi: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none text-sm"
+                />
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-500 mb-1 block">Instansi</label>
-                <select value={editModal.opd_id} onChange={e => setEditModal({...editModal, opd_id: e.target.value})} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                  <option value="">-</option>
-                  {opds.map(o => <option key={o.id} value={o.id}>{o.nama}</option>)}
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 block">
+                  Instansi OPD
+                </label>
+                <select
+                  value={editModal.opd_id}
+                  onChange={(e) => setEditModal({ ...editModal, opd_id: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none text-sm"
+                >
+                  <option value="">— Tidak Terikat —</option>
+                  {opds.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.nama}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={editModal.verified} onChange={e => setEditModal({...editModal, verified: e.target.checked})} className="w-4 h-4 rounded" />
-                  <span className="text-sm font-semibold text-gray-700">Verified</span>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editModal.verified}
+                    onChange={(e) => setEditModal({ ...editModal, verified: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600"
+                  />
+                  <span className="text-sm font-bold text-slate-700">Status Terverifikasi (Aktif)</span>
                 </label>
               </div>
             </div>
 
             {/* Anti-Spoofing Toggle */}
-            <div className={`mt-4 rounded-xl border-2 p-4 transition-all ${
-              editModal.anti_spoofing_enabled
-                ? 'border-green-200 bg-green-50/30'
-                : 'border-amber-200 bg-amber-50/30'
-            }`}>
-              <div className="flex items-center justify-between">
+            <div
+              className={`mt-5 rounded-2xl border p-4 transition-all ${
+                editModal.anti_spoofing_enabled
+                  ? 'border-emerald-200 bg-emerald-50/40'
+                  : 'border-amber-200 bg-amber-50/40'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${
-                    editModal.anti_spoofing_enabled ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
-                  }`}>
+                  <div
+                    className={`p-2 rounded-xl ${
+                      editModal.anti_spoofing_enabled
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
                     {editModal.anti_spoofing_enabled ? <Shield size={20} /> : <ShieldOff size={20} />}
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-gray-800">Fitur Anti-Spoofing (Liveness)</h4>
-                    <p className="text-[11px] text-gray-500 mt-0.5">Analisis temporal multi-frame untuk mendeteksi foto cetak dan layar digital.</p>
+                    <h4 className="text-sm font-bold text-slate-900">Fitur Anti-Spoofing (Liveness)</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Analisis multi-frame untuk mencegah kecurangan foto cetak maupun layar digital.
+                    </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEditModal({...editModal, anti_spoofing_enabled: !editModal.anti_spoofing_enabled})}
-                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    editModal.anti_spoofing_enabled
-                      ? 'bg-green-500 focus:ring-green-400'
-                      : 'bg-gray-300 focus:ring-gray-400'
+                  onClick={() =>
+                    setEditModal({
+                      ...editModal,
+                      anti_spoofing_enabled: !editModal.anti_spoofing_enabled,
+                    })
+                  }
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 shrink-0 cursor-pointer ${
+                    editModal.anti_spoofing_enabled ? 'bg-emerald-500' : 'bg-slate-300'
                   }`}
                 >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
-                    editModal.anti_spoofing_enabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
+                      editModal.anti_spoofing_enabled ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
                 </button>
               </div>
-              <p className={`mt-2 text-[11px] font-medium ${
-                editModal.anti_spoofing_enabled ? 'text-green-700' : 'text-amber-600'
-              }`}>
+              <p
+                className={`mt-2.5 text-[11px] font-semibold ${
+                  editModal.anti_spoofing_enabled ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
                 {editModal.anti_spoofing_enabled
-                  ? '✅ Aktif — Perangkat ini dilindungi dari serangan presentasi'
-                  : '⚠️ Nonaktif — Liveness detection dimatikan untuk perangkat ini'}
+                  ? 'Proteksi Liveness aktif — perangkat terlindungi dari serangan presentasi.'
+                  : 'Perhatian: Liveness detection dimatikan khusus untuk perangkat ini.'}
               </p>
-              {!editModal.anti_spoofing_enabled && (
-                <p className="mt-1.5 text-[10px] text-amber-600 italic">
-                  Matikan hanya jika lokasi mesin memiliki pencahayaan buruk yang menghambat presensi.
-                </p>
-              )}
             </div>
-            <button onClick={handleUpdate} disabled={isLoading} className="mt-5 w-full bg-blue-600 text-white font-bold p-2.5 rounded-lg hover:bg-blue-700 transition">{isLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditModal(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdate}
+                disabled={isLoading}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition shadow-md shadow-blue-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                {isLoading ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </button>
+            </div>
           </div>
         </div>
       )}

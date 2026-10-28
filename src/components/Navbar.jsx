@@ -7,7 +7,7 @@ import {
   FileText, SlidersHorizontal, X, Sparkles
 } from 'lucide-react';
 
-const Navbar = ({ isCollapsed, isMobileOpen, setIsMobileOpen, onLogout }) => {
+const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, onLogout }) => {
   const location = useLocation();
 
   // Dropdown states
@@ -75,12 +75,20 @@ const Navbar = ({ isCollapsed, isMobileOpen, setIsMobileOpen, onLogout }) => {
 
   // Dropdown Cluster Component
   const NavDropdown = ({ label, icon: Icon, isOpen, toggleOpen, children, isActive }) => {
+    const handleClick = () => {
+      if (isCollapsed && setIsCollapsed) {
+        setIsCollapsed(false);
+        if (!isOpen) toggleOpen();
+        return;
+      }
+      toggleOpen();
+    };
     return (
       <div className="flex flex-col space-y-1">
         <button
-          onClick={toggleOpen}
+          onClick={handleClick}
           title={isCollapsed ? label : undefined}
-          className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 w-full ${
+          className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 w-full cursor-pointer ${
             isActive && !isOpen 
               ? 'bg-slate-800 text-blue-400 font-semibold' 
               : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'

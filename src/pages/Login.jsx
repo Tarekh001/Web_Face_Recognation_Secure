@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import API_BASE from '../config/api';
 import logo from '../assets/Kab_Tangerang.png';
 
 // ─── Logo placeholder: drop your actual PNG at src/assets/logo-tangerang.png ───
@@ -72,7 +73,7 @@ const Login = () => {
     setErrorMsg('');
 
     try {
-      const response = await axios.post('http://127.0.0.1:5000/api/login', {
+      const response = await axios.post(`${API_BASE}/login`, {
         username: username,
         password: password
       });

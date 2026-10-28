@@ -3,7 +3,7 @@ import FaceScan from './pages/FaceScan';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import RegisterUser from './pages/RegisterUser';
-import Navbar from './components/NavBar';
+import Navbar from './components/Navbar';
 import ManageASN from './pages/ManageASN';
 import ManageNonASN from './pages/ManageNonASN';
 import OpdPage from './pages/OpdPage';
@@ -53,23 +53,24 @@ const AdminLayout = ({ children }) => {
   return (
     <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800">
       {/* Collapsible & Mobile Sidebar */}
-      <Navbar 
-        isCollapsed={isCollapsed} 
-        isMobileOpen={isMobileOpen} 
-        setIsMobileOpen={setIsMobileOpen} 
-        onLogout={handleLogout} 
+      <Navbar
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
+        isMobileOpen={isMobileOpen}
+        setIsMobileOpen={setIsMobileOpen}
+        onLogout={handleLogout}
       />
 
       {/* Main View Area */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-        <Header 
-          isCollapsed={isCollapsed} 
-          setIsCollapsed={setIsCollapsed} 
-          isMobileOpen={isMobileOpen} 
-          setIsMobileOpen={setIsMobileOpen} 
-          onLogout={handleLogout} 
+        <Header
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+          isMobileOpen={isMobileOpen}
+          setIsMobileOpen={setIsMobileOpen}
+          onLogout={handleLogout}
         />
-        <main className="flex-1 overflow-y-auto bg-slate-50/70">
+        <main className="flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-6 lg:p-7">
           {children}
         </main>
       </div>
@@ -79,28 +80,28 @@ const AdminLayout = ({ children }) => {
 
 // Global Axios Interceptor for 401 Unauthorized responses
 axios.interceptors.response.use(
-    (response) => response, 
-    (error) => {
-        if (error.response && error.response.status === 401) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Sesi Telah Habis',
-                text: 'Sesi Anda telah berakhir. Silakan login kembali untuk keamanan.',
-                confirmButtonColor: '#3085d6',
-                confirmButtonText: 'Login Ulang',
-                allowOutsideClick: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('user_role');
-                    localStorage.removeItem('user_nip');
-                    localStorage.removeItem('user_username');
-                    window.location.href = '/login'; 
-                }
-            });
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sesi Telah Habis',
+        text: 'Sesi Anda telah berakhir. Silakan login kembali untuk keamanan.',
+        confirmButtonColor: '#2563EB',
+        confirmButtonText: 'Login Ulang',
+        allowOutsideClick: false,
+      }).then((result) => {
+        if (result.isConfirmed) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('user_nip');
+          localStorage.removeItem('user_username');
+          window.location.href = '/login';
         }
-        return Promise.reject(error);
+      });
     }
+    return Promise.reject(error);
+  }
 );
 
 function App() {
@@ -122,16 +123,14 @@ function App() {
         <Route path="/laporan/asn" element={<ProtectedRoute><AdminLayout><ReportAsn /></AdminLayout></ProtectedRoute>} />
         <Route path="/laporan/non-asn" element={<ProtectedRoute><AdminLayout><ReportNonAsn /></AdminLayout></ProtectedRoute>} />
 
-        {/* Jalur Super Admin: Master Data — masing-masing komponen terpisah */}
+        {/* Jalur Super Admin: Master Data */}
         <Route path="/master-data" element={<SuperAdminRoute><AdminLayout><OpdPage /></AdminLayout></SuperAdminRoute>} />
         <Route path="/master-data/opd" element={<SuperAdminRoute><AdminLayout><OpdPage /></AdminLayout></SuperAdminRoute>} />
         <Route path="/master-data/admin" element={<SuperAdminRoute><AdminLayout><AdminPage /></AdminLayout></SuperAdminRoute>} />
         <Route path="/master-data/devices" element={<SuperAdminRoute><AdminLayout><DevicePage /></AdminLayout></SuperAdminRoute>} />
 
-        {/* Jalur Super Admin: Audit Trail */}
+        {/* Jalur Super Admin: Audit Trail & Pengaturan Sistem */}
         <Route path="/audit-trail" element={<SuperAdminRoute><AdminLayout><AuditPage /></AdminLayout></SuperAdminRoute>} />
-
-        {/* Jalur Super Admin: Pengaturan Sistem */}
         <Route path="/settings" element={<SuperAdminRoute><AdminLayout><SettingsPage /></AdminLayout></SuperAdminRoute>} />
       </Routes>
     </Router>

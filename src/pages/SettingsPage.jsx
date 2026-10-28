@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import API_BASE from '../config/api';
 import { 
   Settings, Clock, CalendarOff, Save, Plus, Trash2, X, 
-  AlertTriangle, Calendar, Info, CheckCircle2, ShieldAlert
+  AlertTriangle, Calendar, Info, CheckCircle2, PlayCircle, StopCircle
 } from 'lucide-react';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = API_BASE;
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState('jam_kerja');
@@ -80,10 +81,10 @@ const SettingsPage = () => {
     setIsSavingSettings(true);
     try {
       await axios.put(`${API}/settings`, settings, { headers, 'Content-Type': 'application/json' });
-      alert('✅ Pengaturan jam kerja berhasil disimpan!');
+      alert('Pengaturan jam kerja berhasil disimpan!');
       fetchSettings();
     } catch (err) {
-      alert('❌ Gagal: ' + (err.response?.data?.error || 'Error'));
+      alert('Gagal: ' + (err.response?.data?.error || 'Error'));
     } finally {
       setIsSavingSettings(false);
     }
@@ -98,12 +99,12 @@ const SettingsPage = () => {
     setIsAddingHoliday(true);
     try {
       await axios.post(`${API}/holidays`, newHoliday, { headers });
-      alert('✅ Hari libur berhasil ditambahkan!');
+      alert('Hari libur berhasil ditambahkan!');
       setNewHoliday({ tanggal: '', keterangan: '' });
       setShowAddModal(false);
       fetchHolidays();
     } catch (err) {
-      alert('❌ Gagal: ' + (err.response?.data?.error || 'Error'));
+      alert('Gagal: ' + (err.response?.data?.error || 'Error'));
     } finally {
       setIsAddingHoliday(false);
     }
@@ -136,35 +137,35 @@ const SettingsPage = () => {
     { 
       key: 'JAM_MASUK_MULAI',  
       label: 'Jam Mulai Masuk',    
-      icon: '🟢', 
+      icon: <PlayCircle size={15} className="text-emerald-600" />, 
       badge: 'Sesi Masuk',
       desc: 'Waktu paling awal kiosk mulai menerima pemindaian presensi kehadiran pagi.' 
     },
     { 
       key: 'BATAS_TERLAMBAT',  
       label: 'Batas Tepat Waktu',  
-      icon: '⏰', 
+      icon: <Clock size={15} className="text-amber-600" />, 
       badge: 'Ambang Batas',
       desc: 'Pemindaian setelah jam ini secara otomatis tercatat berstatus TERLAMBAT.' 
     },
     { 
       key: 'JAM_MASUK_AKHIR',  
       label: 'Jam Akhir Masuk',    
-      icon: '🔴', 
+      icon: <StopCircle size={15} className="text-rose-600" />, 
       badge: 'Sesi Masuk',
       desc: 'Batas akhir scan sesi pagi. Lewat jam ini kiosk menolak scan kehadiran masuk.' 
     },
     { 
       key: 'JAM_KELUAR_MULAI', 
       label: 'Jam Mulai Pulang',   
-      icon: '🟢', 
+      icon: <PlayCircle size={15} className="text-emerald-600" />, 
       badge: 'Sesi Pulang',
       desc: 'Waktu paling awal pegawai diizinkan melakukan presensi kepulangan kantor.' 
     },
     { 
       key: 'JAM_KELUAR_AKHIR', 
       label: 'Jam Akhir Pulang',   
-      icon: '🔴', 
+      icon: <StopCircle size={15} className="text-rose-600" />, 
       badge: 'Sesi Pulang',
       desc: 'Batas akhir sesi kepulangan malam. Setelah ini kiosk beralih ke mode standby.' 
     },

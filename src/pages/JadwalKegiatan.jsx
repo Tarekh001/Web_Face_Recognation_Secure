@@ -16,7 +16,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-const API_BASE = 'http://127.0.0.1:5000/api';
+import API_BASE from '../config/api';
 const DEFAULT_CENTER = [-6.2088, 106.8456];
 
 const getAuthHeaders = () => ({
@@ -313,68 +313,81 @@ const JadwalKegiatan = () => {
   // RENDER
   // =====================================================================
   return (
-    <main className="p-8 w-full h-full">
-      {/* ── Header ── */}
-      <div className="border-b-2 border-gray-300 pb-4 mb-6 flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-            <CalendarDays size={32} className="text-[#0057A4]" />
-            Jadwal Kegiatan
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Kelola jadwal kegiatan luar kantor & geofencing {isSuperAdmin ? 'seluruh OPD' : 'OPD Anda'}.
-          </p>
+    <div className="space-y-5">
+      {/* ── Top Bento Header & Tabs ── */}
+      <div className="glass-card p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+            <CalendarDays size={20} />
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
+              Jadwal Kegiatan Luar Kantor ({kegiatanList.length})
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Kelola jadwal kegiatan dinas luar & area geofencing {isSuperAdmin ? 'seluruh OPD' : 'OPD Anda'}
+            </p>
+          </div>
         </div>
-        {/* Top action button - contextual to active tab */}
-        {activeTab === 'internal' && !isSuperAdmin && (
-          <button onClick={openCreationModal}
-            className="flex items-center gap-2 bg-[#005bb5] hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-            <Plus size={18} /> Tambah Kegiatan Internal
-          </button>
-        )}
-        {activeTab === 'global' && isSuperAdmin && (
-          <button onClick={openCreationModal}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-            <Globe size={18} /> Buat Kegiatan Global
-          </button>
-        )}
-      </div>
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-        <button
-          onClick={() => setActiveTab('global')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'global'
-              ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-200'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}>
-          <Globe size={16} />
-          Undangan Lintas OPD (Global)
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'global' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-500'
-          }`}>{globalEvents.length}</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('internal')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'internal'
-              ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}>
-          <Building2 size={16} />
-          Kegiatan Internal
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'internal' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'
-          }`}>{internalEvents.length}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Segmented Tabs */}
+          <div className="inline-flex gap-1 bg-slate-100/90 border border-slate-200/80 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setActiveTab('global')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'global'
+                  ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-200'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}>
+              <Globe size={14} />
+              <span>Lintas OPD</span>
+              <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === 'global' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600'
+              }`}>{globalEvents.length}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('internal')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'internal'
+                  ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}>
+              <Building2 size={14} />
+              <span>Internal OPD</span>
+              <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === 'internal' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+              }`}>{internalEvents.length}</span>
+            </button>
+          </div>
+
+          {/* Action button contextual to active tab */}
+          {activeTab === 'internal' && !isSuperAdmin && (
+            <button
+              type="button"
+              onClick={openCreationModal}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer">
+              <Plus size={16} /> Tambah Kegiatan Internal
+            </button>
+          )}
+          {activeTab === 'global' && isSuperAdmin && (
+            <button
+              type="button"
+              onClick={openCreationModal}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-purple-500/20 cursor-pointer">
+              <Globe size={16} /> Buat Kegiatan Global
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Data Table ── */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 text-[11px] font-semibold uppercase tracking-wider">
+            <thead className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-4 w-10">#</th>
                 <th className="px-4 py-4">Nama Kegiatan</th>
@@ -773,7 +786,7 @@ const JadwalKegiatan = () => {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 };
 

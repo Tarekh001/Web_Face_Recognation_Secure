@@ -1,57 +1,107 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { 
-  Download, Search, Calendar, ChevronLeft, ChevronRight, 
+import API_BASE from '../config/api';
+import {
+  Search, Calendar, ChevronLeft, ChevronRight,
   Filter, Clock, MapPin, CheckCircle2, AlertCircle, XCircle,
-  FileSpreadsheet, Users, RotateCcw, CalendarDays
+  FileSpreadsheet, Users, RotateCcw, Camera, Building2, CalendarDays
 } from 'lucide-react';
+import AttendanceMetricCards, { DatePresetBar } from '../components/AttendanceMetricCards';
+import {
+  PhotoThumbnail,
+  AttendanceProofModal,
+  EmployeeRoleBadge,
+  formatTanggalIndo,
+} from '../components/AttendancePhotoModal';
 
 const Dashboard = () => {
+  const userRole = localStorage.getItem('user_role');
+  const isSuperAdmin = userRole === 'super_admin';
+
   const [reports, setReports] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, on_time: 0, late: 0, absent: 0, checked_out: 0 });
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [selectedOpdId, setSelectedOpdId] = useState('');
+  const [opdList, setOpdList] = useState([]);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [isExporting, setIsExporting] = useState(false);
-  const [kegiatanList, setKegiatanList] = useState([]);
-  const [selectedKegiatanId, setSelectedKegiatanId] = useState('');
-  const [roleFilter, setRoleFilter] = useState(''); // '', 'asn', 'non_asn'
+  const [selectedProofRow, setSelectedProofRow] = useState(null);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const token = localStorage.getItem('access_token');
+    axios
+      .get(`${API_BASE}/opd`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => setOpdList(Array.isArray(res.data) ? res.data : res.data?.data || []))
+      .catch(() => {});
+  }, [isSuperAdmin]);
 
   const fetchReports = useCallback(async () => {
     const token = localStorage.getItem('access_token');
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.append('page', currentPage);
-      params.append('limit', itemsPerPage);
-      if (searchQuery) params.append('search_name', searchQuery);
-      if (startDate) params.append('start_date', startDate);
-      if (endDate) params.append('end_date', endDate);
-      if (statusFilter) params.append('status_filter', statusFilter);
-      if (selectedKegiatanId) params.append('kegiatan_id', selectedKegiatanId);
-      if (roleFilter) params.append('role', roleFilter);
+      const params = {
+        page: currentPage,
+        limit: itemsPerPage,
+      };
+      if (searchQuery) params.search_name = searchQuery;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (statusFilter) params.status_filter = statusFilter;
+      if (roleFilter) params.role = roleFilter;
+      if (isSuperAdmin && selectedOpdId) params.opd_id = selectedOpdId;
 
-      const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await axios.get(`${API_BASE}/report`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
       });
+
       if (Array.isArray(res.data)) {
-        setReports(res.data); setTotalPages(1); setTotalItems(res.data.length);
+        const arr = res.data;
+        setReports(arr);
+        setTotalPages(1);
+        setTotalItems(arr.length);
+        setSummary({
+          total: arr.length,
+          on_time: arr.filter((r) => r.status_masuk === 'ON_TIME').length,
+          late: arr.filter((r) => r.status_masuk === 'LATE').length,
+          absent: arr.filter((r) => r.status_masuk === 'ABSENT').length,
+          checked_out: arr.filter((r) => Boolean(r.jam_keluar)).length,
+        });
       } else {
-        setReports(res.data.data || []);
+        const rows = res.data.data || [];
+        setReports(rows);
         setTotalPages(res.data.total_pages || 1);
         setTotalItems(res.data.total_records || 0);
+        if (res.data.summary) {
+          setSummary(res.data.summary);
+        } else {
+          setSummary({
+            total: res.data.total_records || rows.length,
+            on_time: rows.filter((r) => r.status_masuk === 'ON_TIME').length,
+            late: rows.filter((r) => r.status_masuk === 'LATE').length,
+            absent: rows.filter((r) => r.status_masuk === 'ABSENT').length,
+            checked_out: rows.filter((r) => Boolean(r.jam_keluar)).length,
+          });
+        }
       }
-    } catch (err) { 
-      console.error('Gagal mengambil laporan:', err); 
-    } finally { 
-      setIsLoading(false); 
+    } catch (err) {
+      console.error('Gagal mengambil laporan:', err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter, selectedKegiatanId, roleFilter]);
+  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter, roleFilter, isSuperAdmin, selectedOpdId]);
 
   useEffect(() => {
     fetchReports();
@@ -59,77 +109,97 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchReports]);
 
-  useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    axios.get('http://127.0.0.1:5000/api/kegiatan', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => setKegiatanList(Array.isArray(res.data) ? res.data : res.data.data || []))
-      .catch(() => {});
-  }, []);
-
-  const stats = useMemo(() => {
-    let onTime = 0, late = 0, absent = 0;
-    reports.forEach(r => {
-      if (r.status_masuk === 'ON_TIME') onTime++;
-      else if (r.status_masuk === 'LATE') late++;
-      else if (r.status_masuk === 'ABSENT') absent++;
-    });
-    return { onTime, late, absent };
-  }, [reports]);
-
-  const handleFilterChange = (setter) => (e) => { setter(e.target.value); setCurrentPage(1); };
-  const handleResetFilters = () => { 
-    setSearchQuery(''); setStartDate(''); setEndDate(''); 
-    setStatusFilter(''); setSelectedKegiatanId(''); setRoleFilter(''); 
-    setCurrentPage(1); 
+  const handleFilterChange = (setter) => (e) => {
+    setter(e.target.value);
+    setCurrentPage(1);
   };
-  const handleItemsPerPageChange = (e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); };
+
+  const handleSelectDateRange = (start, end) => {
+    setStartDate(start);
+    setEndDate(end);
+    setCurrentPage(1);
+  };
+
+  const handleSelectStatusFromCard = (status) => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStartDate('');
+    setEndDate('');
+    setStatusFilter('');
+    setRoleFilter('');
+    setSelectedOpdId('');
+    setCurrentPage(1);
+  };
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(Number(e.target.value));
+    setCurrentPage(1);
+  };
 
   const handleExportCSV = async () => {
     if (totalItems === 0) return alert('Tidak ada data untuk di-export');
     setIsExporting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const params = new URLSearchParams();
-      params.append('page', 1);
-      params.append('limit', 99999);
-      if (searchQuery) params.append('search_name', searchQuery);
-      if (startDate) params.append('start_date', startDate);
-      if (endDate) params.append('end_date', endDate);
-      if (statusFilter) params.append('status_filter', statusFilter);
-      if (selectedKegiatanId) params.append('kegiatan_id', selectedKegiatanId);
-      if (roleFilter) params.append('role', roleFilter);
+      const params = { page: 1, limit: 99999 };
+      if (searchQuery) params.search_name = searchQuery;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (statusFilter) params.status_filter = statusFilter;
+      if (roleFilter) params.role = roleFilter;
+      if (isSuperAdmin && selectedOpdId) params.opd_id = selectedOpdId;
 
-      const res = await axios.get(`http://127.0.0.1:5000/api/report?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await axios.get(`${API_BASE}/report`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
       });
-      const allData = Array.isArray(res.data) ? res.data : (res.data.data || []);
-
+      const allData = Array.isArray(res.data) ? res.data : res.data.data || [];
       if (allData.length === 0) return alert('Tidak ada data untuk di-export');
 
-      let csv = 'NIP/NIK,Tipe,Nama,Tanggal,Jam Masuk,Status Masuk,Keterlambatan,Jam Keluar,Status Keluar,Lokasi\n';
-      allData.forEach(r => {
-        const ket = r.status_masuk === 'LATE' && r.keterlambatan_menit > 0 ? `Terlambat ${r.keterlambatan_menit} Menit` : 'Tepat Waktu';
+      let csv = '\uFEFFNIP/NIK,Tipe Pegawai,Nama,Instansi OPD,Tanggal,Jam Masuk,Status Masuk,Keterlambatan (Menit),Jam Pulang,Status Pulang,Lokasi Kiosk\n';
+      allData.forEach((r) => {
+        const statusMasukLabel =
+          r.status_masuk === 'ABSENT'
+            ? 'Tidak Hadir'
+            : r.status_masuk === 'LATE'
+              ? `Terlambat (${r.keterlambatan_menit || 0} Menit)`
+              : 'Tepat Waktu';
+        const statusPulangLabel =
+          r.status_masuk === 'ABSENT'
+            ? '-'
+            : r.jam_keluar
+              ? 'Sudah Pulang'
+              : 'Belum Pulang';
         const tipe = r.role === 'non_asn' ? 'Non-ASN' : 'ASN';
-        csv += `${r.nip},${tipe},"${r.nama}",${r.tanggal},${r.jam_masuk || '-'},${r.status_masuk === 'ABSENT' ? 'Tidak Hadir' : ket},${r.keterlambatan_menit || 0},${r.jam_keluar || '-'},${r.status_keluar || '-'},"${r.nama_lokasi || r.device_sn || '-'}"\n`;
+        csv += `"${r.nip}",${tipe},"${r.nama}","${r.nama_opd || '-'}",${r.tanggal},${r.jam_masuk || '-'},"${statusMasukLabel}",${r.keterlambatan_menit || 0},${r.jam_keluar || '-'},"${statusPulangLabel}","${r.nama_lokasi || r.device_sn || '-'}"\n`;
       });
+
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.setAttribute('download', `Laporan_Presensi_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    } catch (err) { 
-      alert('Gagal export: ' + (err.response?.data?.error || err.message)); 
-    } finally { 
-      setIsExporting(false); 
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Gagal export: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsExporting(false);
     }
   };
 
   const getPageNumbers = () => {
     const pages = [];
-    if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
-    else {
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
       pages.push(1);
-      let start = Math.max(2, currentPage - 1), end = Math.min(totalPages - 1, currentPage + 1);
+      let start = Math.max(2, currentPage - 1);
+      let end = Math.min(totalPages - 1, currentPage + 1);
       if (currentPage <= 3) { start = 2; end = 5; }
       if (currentPage >= totalPages - 2) { start = totalPages - 4; end = totalPages - 1; }
       if (start > 2) pages.push('...');
@@ -140,238 +210,183 @@ const Dashboard = () => {
     return pages;
   };
 
-  const formatTanggal = (d) => {
-    if (!d) return '—';
-    try { 
-      return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); 
-    } catch { 
-      return d; 
-    }
-  };
-
-  const hasActiveFilters = searchQuery || startDate || endDate || statusFilter || selectedKegiatanId || roleFilter;
+  const hasActiveFilters = Boolean(searchQuery || startDate || endDate || statusFilter || roleFilter || selectedOpdId);
+  const totalSubtitle =
+    roleFilter === 'asn'
+      ? 'Pegawai ASN (termasuk Admin OPD)'
+      : roleFilter === 'non_asn'
+        ? 'Tenaga Non-ASN terdaftar'
+        : 'Seluruh ASN & Non-ASN';
 
   return (
-    <div className="space-y-6">
-      
-      {/* ── BENTO HEADER & METRICS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Metric 1 */}
-        <div className="sm:col-span-2 lg:col-span-1 glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Total Log Presensi
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-              <Users size={16} />
-            </div>
-          </div>
-          <div className="mt-3">
-            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              {totalItems.toLocaleString('id-ID')}
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Seluruh ASN & Non-ASN</p>
-          </div>
-        </div>
+    <div className="space-y-5">
+      {/* ── BENTO METRIC SUMMARY (GLOBAL COUNTS + CLICKABLE QUICK FILTER) ── */}
+      <AttendanceMetricCards
+        summary={summary}
+        statusFilter={statusFilter}
+        onSelectStatus={handleSelectStatusFromCard}
+        totalLabel="Total Rekap Presensi"
+        totalSubtext={totalSubtitle}
+      />
 
-        {/* Metric 2 */}
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-              Tepat Waktu
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-              <CheckCircle2 size={16} />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-2xl font-extrabold text-emerald-700">
-              {stats.onTime} <span className="text-xs font-normal text-slate-400">di halaman ini</span>
-            </p>
-            <p className="text-xs text-emerald-600/80 mt-0.5 font-medium">Hadir tepat waktu</p>
-          </div>
-        </div>
-
-        {/* Metric 3 */}
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-red-600">
-              Terlambat
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-600">
-              <Clock size={16} />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-2xl font-extrabold text-red-600">
-              {stats.late} <span className="text-xs font-normal text-slate-400">di halaman ini</span>
-            </p>
-            <p className="text-xs text-red-500/80 mt-0.5 font-medium">Lewat batas toleransi</p>
-          </div>
-        </div>
-
-        {/* Metric 4 */}
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-              Tidak Hadir
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
-              <XCircle size={16} />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-2xl font-extrabold text-slate-700">
-              {stats.absent} <span className="text-xs font-normal text-slate-400">di halaman ini</span>
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">Tanpa riwayat tap/scan</p>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── BENTO CARD: FILTER & ACTION TOOLBAR ── */}
+      {/* ── FILTER & ACTION TOOLBAR ── */}
       <div className="glass-panel p-5">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-          
-          {/* Filters Form Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 flex-1">
-            
+        <DatePresetBar
+          startDate={startDate}
+          endDate={endDate}
+          onSelectRange={handleSelectDateRange}
+        />
+
+        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${isSuperAdmin ? 'xl:grid-cols-6' : 'xl:grid-cols-5'} gap-3 flex-1`}>
             {/* Search */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Pencarian
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                Pencarian Pegawai
               </label>
               <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input 
-                  type="text" 
-                  placeholder="Cari NIP/Nama..." 
-                  value={searchQuery} 
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                <input
+                  type="text"
+                  placeholder="Cari NIP / NIK / Nama..."
+                  value={searchQuery}
                   onChange={handleFilterChange(setSearchQuery)}
-                  className="w-full pl-10 pr-3.5 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs" 
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs"
                 />
               </div>
             </div>
 
             {/* Start Date */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Tanggal Mulai
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                Dari Tanggal
               </label>
               <div className="relative">
-                <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input 
-                  type="date" 
-                  value={startDate} 
+                <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                <input
+                  type="date"
+                  value={startDate}
                   onChange={handleFilterChange(setStartDate)}
-                  className="w-full pl-10 pr-3 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs" 
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs cursor-pointer"
                 />
               </div>
             </div>
 
             {/* End Date */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Tanggal Akhir
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                Sampai Tanggal
               </label>
               <div className="relative">
-                <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input 
-                  type="date" 
-                  value={endDate} 
+                <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                <input
+                  type="date"
+                  value={endDate}
                   onChange={handleFilterChange(setEndDate)}
-                  className="w-full pl-10 pr-3 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs" 
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs cursor-pointer"
                 />
               </div>
             </div>
 
             {/* Status Filter */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Status
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                Status Kehadiran
               </label>
               <div className="relative">
-                <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <select 
-                  value={statusFilter} 
+                <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                <select
+                  value={statusFilter}
                   onChange={handleFilterChange(setStatusFilter)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
+                  className="w-full pl-9 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
                 >
                   <option value="">Semua Status</option>
                   <option value="ON_TIME">Tepat Waktu</option>
                   <option value="LATE">Terlambat</option>
-                  <option value="ABSENT">Tidak Hadir</option>
+                  <option value="ABSENT">Belum / Tidak Hadir</option>
                 </select>
-                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={16} />
+                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={15} />
               </div>
             </div>
 
-            {/* Kegiatan Filter */}
+            {/* Tipe Pegawai */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                Kegiatan
-              </label>
-              <div className="relative">
-                <CalendarDays className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <select 
-                  value={selectedKegiatanId} 
-                  onChange={handleFilterChange(setSelectedKegiatanId)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
-                >
-                  <option value="">Presensi Reguler</option>
-                  {kegiatanList.map(k => (
-                    <option key={k.id} value={k.id}>{k.nama_kegiatan}</option>
-                  ))}
-                </select>
-                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={16} />
-              </div>
-            </div>
-
-            {/* Tipe Pegawai (Role) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
                 Tipe Pegawai
               </label>
               <div className="relative">
-                <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <select 
-                  value={roleFilter} 
+                <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                <select
+                  value={roleFilter}
                   onChange={handleFilterChange(setRoleFilter)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
+                  className="w-full pl-9 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
                 >
-                  <option value="">Semua Tipe</option>
-                  <option value="asn">ASN</option>
+                  <option value="">Semua Pegawai</option>
+                  <option value="asn">ASN (Termasuk Admin)</option>
                   <option value="non_asn">Non-ASN</option>
                 </select>
-                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={16} />
+                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={15} />
               </div>
             </div>
 
+            {/* OPD Filter (Super Admin Only) */}
+            {isSuperAdmin && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                  Instansi OPD
+                </label>
+                <div className="relative">
+                  <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                  <select
+                    value={selectedOpdId}
+                    onChange={handleFilterChange(setSelectedOpdId)}
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
+                  >
+                    <option value="">Seluruh Instansi</option>
+                    {opdList.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nama || o.nama_opd}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={15} />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Action Buttons: Reset & Export */}
-          <div className="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-1 xl:pt-0">
             {hasActiveFilters && (
-              <button 
-                onClick={handleResetFilters} 
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 rounded-xl transition-all shadow-soft-xs active:scale-[0.98]"
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 rounded-xl transition-all cursor-pointer active:scale-[0.98]"
               >
-                <RotateCcw size={15} />
-                Reset
+                <RotateCcw size={14} />
+                <span>Reset Filter</span>
               </button>
             )}
 
-            <button 
-              onClick={handleExportCSV} 
-              disabled={isExporting} 
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2 rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait"
+            <Link
+              to="/laporan-kegiatan"
+              title="Lihat rekap presensi kegiatan luar kantor"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-xl transition-all"
+            >
+              <CalendarDays size={14} />
+              <span>Rekap Kegiatan</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={isExporting}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait"
             >
               {isExporting ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-                  <span>Exporting...</span>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Mengekspor...</span>
                 </>
               ) : (
                 <>
@@ -381,35 +396,40 @@ const Dashboard = () => {
               )}
             </button>
           </div>
-
         </div>
       </div>
 
-      {/* ── BENTO CARD: DATA TABLE ── */}
+      {/* ── DATA TABLE WITH FOTO BUKTI ── */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-                <th className="px-5 py-4 w-12 text-center">#</th>
-                <th className="px-5 py-4">Pegawai</th>
-                <th className="px-5 py-4">Tanggal</th>
-                <th className="px-5 py-4 text-center">
+              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+                <th className="px-4 py-3.5 w-12 text-center">#</th>
+                <th className="px-4 py-3.5">Pegawai</th>
+                <th className="px-3 py-3.5 text-center">
                   <div className="flex items-center justify-center gap-1.5">
-                    <Clock size={13} className="text-slate-400" />
-                    <span>Masuk</span>
+                    <Camera size={13} className="text-slate-400" />
+                    <span>Foto Bukti</span>
                   </div>
                 </th>
-                <th className="px-5 py-4 text-center">Status Masuk</th>
-                <th className="px-5 py-4 text-center">Keterangan</th>
-                <th className="px-5 py-4 text-center">
+                <th className="px-4 py-3.5">Tanggal</th>
+                <th className="px-4 py-3.5 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Clock size={13} className="text-slate-400" />
-                    <span>Keluar</span>
+                    <span>Jam Masuk</span>
                   </div>
                 </th>
-                <th className="px-5 py-4 text-center">Status Keluar</th>
-                <th className="px-5 py-4 text-center">
+                <th className="px-4 py-3.5 text-center">Status Masuk</th>
+                <th className="px-4 py-3.5 text-center">Keterangan</th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Clock size={13} className="text-slate-400" />
+                    <span>Jam Pulang</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">Status Pulang</th>
+                <th className="px-4 py-3.5 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <MapPin size={13} className="text-slate-400" />
                     <span>Lokasi Kiosk</span>
@@ -420,9 +440,9 @@ const Dashboard = () => {
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-20">
+                  <td colSpan="10" className="text-center py-20">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="w-9 h-9 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin"/>
+                      <div className="w-9 h-9 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
                       <span className="text-slate-400 text-sm font-medium">Memuat data presensi...</span>
                     </div>
                   </td>
@@ -435,44 +455,50 @@ const Dashboard = () => {
                   const isNonAsn = row.role === 'non_asn';
 
                   return (
-                    <tr 
-                      key={`${row.nip}-${row.tanggal}-${idx}`} 
-                      className={`hover:bg-blue-50/30 transition-colors ${isNonAsn ? 'hover:bg-amber-50/20' : ''}`}
+                    <tr
+                      key={`${row.nip}-${row.tanggal}-${idx}`}
+                      className={`transition-colors ${
+                        isNonAsn ? 'hover:bg-amber-50/30' : 'hover:bg-blue-50/30'
+                      }`}
                     >
-                      <td className="px-5 py-4 text-center text-xs font-mono text-slate-400">
+                      <td className="px-4 py-3.5 text-center text-xs font-mono text-slate-400">
                         {(currentPage - 1) * itemsPerPage + idx + 1}
                       </td>
 
                       {/* Identitas */}
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-3.5">
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-900 text-sm leading-snug">
                             {row.nama}
                           </span>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="font-mono text-xs text-slate-500 font-medium tracking-tight">
                               {row.nip}
                             </span>
-                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold ring-1 ${
-                              isNonAsn 
-                                ? 'bg-amber-50 text-amber-700 ring-amber-200' 
-                                : 'bg-blue-50 text-blue-700 ring-blue-200'
-                            }`}>
-                              {isNonAsn ? 'Non-ASN' : 'ASN'}
-                            </span>
+                            <EmployeeRoleBadge role={row.role} />
+                            {isSuperAdmin && row.nama_opd && (
+                              <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md truncate max-w-[160px]" title={row.nama_opd}>
+                                {row.nama_opd}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
 
+                      {/* Foto Bukti */}
+                      <td className="px-3 py-3.5 text-center">
+                        <PhotoThumbnail row={row} onSelect={setSelectedProofRow} />
+                      </td>
+
                       {/* Tanggal */}
-                      <td className="px-5 py-4 text-slate-700 text-sm font-medium whitespace-nowrap">
-                        {formatTanggal(row.tanggal)}
+                      <td className="px-4 py-3.5 text-slate-700 text-xs sm:text-sm font-medium whitespace-nowrap">
+                        {formatTanggalIndo(row.tanggal)}
                       </td>
 
                       {/* Jam Masuk */}
-                      <td className="px-5 py-4 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         {row.jam_masuk ? (
-                          <span className="font-mono font-bold text-slate-900 bg-slate-100/80 px-2 py-1 rounded-lg border border-slate-200/60">
+                          <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/70">
                             {row.jam_masuk}
                           </span>
                         ) : (
@@ -481,19 +507,21 @@ const Dashboard = () => {
                       </td>
 
                       {/* Status Masuk */}
-                      <td className="px-5 py-4 text-center">
+                      <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         {isAbsent ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 ring-1 ring-slate-200">
-                            <XCircle size={12} /> Tidak Hadir
+                            <XCircle size={12} /> Belum Hadir
                           </span>
                         ) : row.jam_masuk ? (
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ring-1 ${
-                            isLate 
-                              ? 'bg-red-50 text-red-600 ring-red-200' 
-                              : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                          }`}>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ring-1 ${
+                              isLate
+                                ? 'bg-red-50 text-red-600 ring-red-200'
+                                : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                            }`}
+                          >
                             {isLate ? <AlertCircle size={12} /> : <CheckCircle2 size={12} />}
-                            {isLate ? 'Terlambat' : 'Masuk'}
+                            {isLate ? 'Terlambat' : 'Tepat Waktu'}
                           </span>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -501,24 +529,24 @@ const Dashboard = () => {
                       </td>
 
                       {/* Keterangan */}
-                      <td className="px-5 py-4 text-center">
+                      <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         {isAbsent ? (
-                          <span className="text-xs text-slate-400 italic">Tidak Absen</span>
+                          <span className="text-slate-300 font-mono">—</span>
                         ) : isLate && row.keterlambatan_menit > 0 ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold text-red-600 bg-red-50 border border-red-100">
-                            Terlambat {row.keterlambatan_menit} Menit
+                            +{row.keterlambatan_menit} Menit
                           </span>
                         ) : row.jam_masuk ? (
-                          <span className="text-xs font-semibold text-emerald-600">Tepat Waktu</span>
+                          <span className="text-xs font-semibold text-emerald-600">Sesuai Jadwal</span>
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
 
-                      {/* Jam Keluar */}
-                      <td className="px-5 py-4 text-center">
+                      {/* Jam Pulang */}
+                      <td className="px-4 py-3.5 text-center">
                         {row.jam_keluar ? (
-                          <span className="font-mono font-bold text-slate-900 bg-slate-100/80 px-2 py-1 rounded-lg border border-slate-200/60">
+                          <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/70">
                             {row.jam_keluar}
                           </span>
                         ) : (
@@ -526,25 +554,29 @@ const Dashboard = () => {
                         )}
                       </td>
 
-                      {/* Status Keluar */}
-                      <td className="px-5 py-4 text-center">
-                        {isCheckedOut ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 ring-1 ring-orange-200">
+                      {/* Status Pulang */}
+                      <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                        {isAbsent ? (
+                          <span className="text-slate-300 font-mono">—</span>
+                        ) : isCheckedOut ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
                             <CheckCircle2 size={12} /> Sudah Pulang
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-50 text-slate-400 ring-1 ring-slate-200">
-                            Belum Absen
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+                            <Clock size={12} /> Belum Pulang
                           </span>
                         )}
                       </td>
 
-                      {/* Lokasi */}
-                      <td className="px-5 py-4 text-center">
-                        {(row.nama_lokasi || row.device_sn) ? (
+                      {/* Lokasi Kiosk */}
+                      <td className="px-4 py-3.5 text-center">
+                        {row.nama_lokasi || row.device_sn ? (
                           <span className="inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-xl border border-indigo-100 shadow-soft-xs">
-                            <MapPin size={12} className="text-indigo-500" />
-                            <span className="max-w-[140px] truncate">{row.nama_lokasi || row.device_sn}</span>
+                            <MapPin size={12} className="text-indigo-500 shrink-0" />
+                            <span className="max-w-[140px] truncate" title={row.nama_lokasi || row.device_sn}>
+                              {row.nama_lokasi || row.device_sn}
+                            </span>
                           </span>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -555,19 +587,20 @@ const Dashboard = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="9" className="text-center py-20">
+                  <td colSpan="10" className="text-center py-20">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
                         <Search size={22} />
                       </div>
                       <p className="text-slate-700 font-bold text-base">Tidak ada data presensi ditemukan</p>
                       <p className="text-slate-400 text-xs max-w-sm">
-                        Coba sesuaikan tanggal atau kriteria filter untuk melihat data presensi lainnya.
+                        Coba sesuaikan rentang tanggal atau kriteria filter untuk menampilkan data lainnya.
                       </p>
                       {hasActiveFilters && (
-                        <button 
-                          onClick={handleResetFilters} 
-                          className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-700 underline"
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-700 underline cursor-pointer"
                         >
                           Reset semua filter
                         </button>
@@ -582,15 +615,25 @@ const Dashboard = () => {
 
         {/* ── PAGINATION BAR ── */}
         <div className="p-4 sm:px-6 border-t border-slate-200/80 bg-slate-50/60 flex flex-wrap justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <p className="text-xs text-slate-500 font-medium">
-              Menampilkan baris <span className="font-bold text-slate-800">{reports.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</span>-
-              <span className="font-bold text-slate-800">{Math.min(currentPage * itemsPerPage, totalItems)}</span> dari <span className="font-bold text-slate-800">{totalItems}</span>
+              Menampilkan baris{' '}
+              <span className="font-bold text-slate-800">
+                {reports.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
+              </span>
+              –
+              <span className="font-bold text-slate-800">
+                {Math.min(currentPage * itemsPerPage, totalItems)}
+              </span>{' '}
+              dari <span className="font-bold text-slate-800">{totalItems}</span> data
+              {statusFilter && summary.total !== totalItems && (
+                <span className="text-slate-400"> (difilter dari {summary.total} total rekap)</span>
+              )}
             </p>
             <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-              <label className="text-xs text-slate-400 font-medium">Baris:</label>
-              <select 
-                value={itemsPerPage} 
+              <label className="text-xs text-slate-400 font-medium">Baris per halaman:</label>
+              <select
+                value={itemsPerPage}
                 onChange={handleItemsPerPageChange}
                 className="px-2 py-1 text-xs font-semibold border border-slate-200 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none cursor-pointer"
               >
@@ -603,37 +646,44 @@ const Dashboard = () => {
 
           {totalPages > 1 && (
             <div className="flex items-center gap-1.5">
-              <button 
-                disabled={currentPage === 1} 
-                onClick={() => setCurrentPage(p => p - 1)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-soft-xs"
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-soft-xs"
               >
                 <ChevronLeft size={14} />
-                <span>Prev</span>
+                <span>Sebelumnya</span>
               </button>
 
-              {getPageNumbers().map((pg, i) => pg === '...' ? (
-                <span key={`dots-${i}`} className="px-2 text-slate-400 text-xs">···</span>
-              ) : (
-                <button 
-                  key={pg} 
-                  onClick={() => setCurrentPage(pg)} 
-                  className={`min-w-[32px] h-[32px] flex items-center justify-center text-xs font-bold rounded-lg transition-all ${
-                    currentPage === pg 
-                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30' 
-                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {pg}
-                </button>
-              ))}
+              {getPageNumbers().map((pg, i) =>
+                pg === '...' ? (
+                  <span key={`dots-${i}`} className="px-2 text-slate-400 text-xs">
+                    ···
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    key={pg}
+                    onClick={() => setCurrentPage(pg)}
+                    className={`min-w-[32px] h-[32px] flex items-center justify-center text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      currentPage === pg
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                        : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {pg}
+                  </button>
+                )
+              )}
 
-              <button 
-                disabled={currentPage === totalPages} 
-                onClick={() => setCurrentPage(p => p + 1)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-soft-xs"
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-soft-xs"
               >
-                <span>Next</span>
+                <span>Berikutnya</span>
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -641,6 +691,8 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* ── MODAL POPUP PRATINJAU FOTO BUKTI PRESENSI ── */}
+      <AttendanceProofModal row={selectedProofRow} onClose={() => setSelectedProofRow(null)} />
     </div>
   );
 };
