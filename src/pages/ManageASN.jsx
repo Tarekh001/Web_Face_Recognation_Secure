@@ -6,7 +6,7 @@ import API_BASE from '../config/api';
 import {
   Users, UserCheck, UserX, LogOut,
   Search, Trash2, Edit, X, CheckCircle2, Circle, Save, Shield,
-  Fingerprint, RotateCcw, ChevronLeft, ChevronRight
+  Fingerprint, RotateCcw, ChevronLeft, ChevronRight, Clock
 } from 'lucide-react';
 import { getInitials } from '../components/AttendancePhotoModal';
 
@@ -31,6 +31,8 @@ const EditUserModal = ({ user, opdList, onClose, onSaved }) => {
         .catch(console.error);
     }
   }, [reRegisterFace]);
+
+  
 
   const captureAndCrop = async () => {
     if (capturedPhotos.length >= 5) return;
@@ -85,6 +87,8 @@ const EditUserModal = ({ user, opdList, onClose, onSaved }) => {
       setIsSaving(false);
     }
   };
+
+  
 
   const idx = capturedPhotos.length;
   return (
@@ -248,6 +252,16 @@ const ManageASN = () => {
       setIsLoading(false);
     }
   };
+
+  const toTitleCase = (str) => {
+    if (!str) return "-";
+    return str
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  }
 
   const fetchOPDList = async () => {
     const token = localStorage.getItem('access_token');
@@ -472,7 +486,7 @@ const ManageASN = () => {
               <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
                 <th className="px-4 py-3.5 w-12 text-center">#</th>
                 <th className="px-4 py-3.5">Identitas Pegawai ASN</th>
-                <th className="px-4 py-3.5">Peran & Biometrik</th>
+                <th className="px-4 py-3.5">Peran</th>
                 <th className="px-4 py-3.5">Instansi OPD</th>
                 <th className="px-4 py-3.5">Status Hari Ini</th>
                 <th className="px-4 py-3.5">Akses Lintas OPD</th>
@@ -501,7 +515,9 @@ const ManageASN = () => {
                           {getInitials(asn.nama)}
                         </div>
                         <div>
-                          <span className="font-bold text-slate-900 block leading-snug">{asn.nama}</span>
+                          <span className="font-bold text-slate-900 block leading-snug ">
+                            {toTitleCase(asn.nama)}
+                          </span>
                           <span className="font-mono text-xs text-slate-500">{asn.nip}</span>
                         </div>
                       </div>
@@ -509,6 +525,7 @@ const ManageASN = () => {
                     <td className="px-4 py-3.5">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <RoleBadge role={asn.role} />
+                        {/* sementara*/}
                         {asn.is_face_registered ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
                             <Fingerprint size={10} /> Wajah Aktif
@@ -516,6 +533,14 @@ const ManageASN = () => {
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-500 ring-1 ring-slate-200">
                             Belum Rekam
+                          </span>
+                        )}
+                        {asn.nama_shift && (
+                          <span
+                            title={`Jam Baku: ${asn.jam_baku || '-'}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                          >
+                            <Clock size={10} /> {asn.nama_shift}
                           </span>
                         )}
                       </div>

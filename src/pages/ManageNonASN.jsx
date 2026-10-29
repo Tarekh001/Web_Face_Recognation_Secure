@@ -6,7 +6,7 @@ import API_BASE from '../config/api';
 import {
   Users, UserCheck, UserX, LogOut,
   Search, Trash2, Edit, X, CheckCircle2, Circle, Save,
-  Fingerprint, RotateCcw, ChevronLeft, ChevronRight
+  Fingerprint, RotateCcw, ChevronLeft, ChevronRight, Clock
 } from 'lucide-react';
 import { getInitials } from '../components/AttendancePhotoModal';
 
@@ -337,6 +337,16 @@ const ManageNonASN = () => {
     setCurrentPage(1);
   };
 
+  const toTitleCase = (str) => {
+    if (!str) return "-";
+    return str
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  }
+
   return (
     <div className="space-y-5">
       {/* ── BENTO SUMMARY CARDS ── */}
@@ -486,7 +496,9 @@ const ManageNonASN = () => {
                           {getInitials(item.nama)}
                         </div>
                         <div>
-                          <span className="font-bold text-slate-900 block leading-snug">{item.nama}</span>
+                          <span className="font-bold text-slate-900 block leading-snug">
+                            {toTitleCase(item.nama)}
+                            </span>
                           <span className="font-mono text-xs text-slate-500">{item.nip}</span>
                         </div>
                       </div>
@@ -503,6 +515,14 @@ const ManageNonASN = () => {
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-500 ring-1 ring-slate-200">
                             Belum Rekam
+                          </span>
+                        )}
+                        {item.nama_shift && (
+                          <span
+                            title={`Jam Baku: ${item.jam_baku || '-'}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                          >
+                            <Clock size={10} /> {item.nama_shift}
                           </span>
                         )}
                       </div>

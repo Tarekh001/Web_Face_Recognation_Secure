@@ -11,6 +11,7 @@ const Header = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
     if (path.startsWith('/dashboard')) return { title: 'Dashboard Utama', category: 'Overview' };
     if (path.startsWith('/manage-asn')) return { title: 'Data Personel ASN', category: 'Manajemen' };
     if (path.startsWith('/manage-non-asn')) return { title: 'Data Personel Non-ASN', category: 'Manajemen' };
+    if (path.startsWith('/jam-kerja')) return { title: 'Manajemen Jam Kerja & Shift', category: 'Manajemen' };
     if (path.startsWith('/register')) return { title: 'Registrasi Biometrik Wajah', category: 'Manajemen' };
     if (path.startsWith('/kegiatan')) return { title: 'Jadwal Kegiatan Luar Kantor', category: 'Kegiatan' };
     if (path.startsWith('/laporan-kegiatan')) return { title: 'Rekap Presensi Kegiatan', category: 'Laporan' };

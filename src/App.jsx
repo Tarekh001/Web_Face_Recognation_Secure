@@ -15,6 +15,7 @@ import JadwalKegiatan from './pages/JadwalKegiatan';
 import LaporanKegiatan from './pages/LaporanKegiatan';
 import ReportAsn from './pages/ReportAsn';
 import ReportNonAsn from './pages/ReportNonAsn';
+import JamKerjaPage from './pages/JamKerjaPage';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { useState } from 'react';
@@ -118,6 +119,7 @@ function App() {
         <Route path="/register" element={<ProtectedRoute><AdminLayout><RegisterUser /></AdminLayout></ProtectedRoute>} />
         <Route path="/manage-asn" element={<ProtectedRoute><AdminLayout><ManageASN /></AdminLayout></ProtectedRoute>} />
         <Route path="/manage-non-asn" element={<ProtectedRoute><AdminLayout><ManageNonASN /></AdminLayout></ProtectedRoute>} />
+        <Route path="/jam-kerja" element={<ProtectedRoute><AdminLayout><JamKerjaPage /></AdminLayout></ProtectedRoute>} />
         <Route path="/kegiatan" element={<ProtectedRoute><AdminLayout><JadwalKegiatan /></AdminLayout></ProtectedRoute>} />
         <Route path="/laporan-kegiatan" element={<ProtectedRoute><AdminLayout><LaporanKegiatan /></AdminLayout></ProtectedRoute>} />
         <Route path="/laporan/asn" element={<ProtectedRoute><AdminLayout><ReportAsn /></AdminLayout></ProtectedRoute>} />

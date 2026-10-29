@@ -52,6 +52,65 @@ export const EmployeeRoleBadge = ({ role }) => {
   );
 };
 
+export const ShiftBadge = ({ row }) => {
+  if (!row || !row.nama_shift) return null;
+  const isNight = Boolean(row.is_lintas_hari) || (row.nama_shift || '').toLowerCase().includes('malam');
+  return (
+    <span
+      title={`Shift: ${row.nama_shift}${row.jam_baku ? ` (${row.jam_baku})` : ''}${row.shift_source === 'ROSTER' ? ' • Jadwal Roster' : ''}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold ring-1 ${
+        isNight
+          ? 'bg-purple-50 text-purple-700 ring-purple-200/90'
+          : row.shift_source === 'ROSTER'
+            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/90'
+            : 'bg-slate-100 text-slate-600 ring-slate-200/90'
+      }`}
+    >
+      <Clock size={9} />
+      <span className="truncate max-w-[130px]">{row.nama_shift}</span>
+      {row.is_lintas_hari && <span title="Shift Lintas Hari">🌙</span>}
+    </span>
+  );
+};
+
+export const CheckoutStatusBadge = ({ row }) => {
+  if (!row || row.status_masuk === 'ABSENT') {
+    return <span className="text-slate-300 font-mono">—</span>;
+  }
+  if (row.status_keluar === 'DINAS_LUAR' || row.is_dinas_luar) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200"
+        title={row.keterangan_jadwal || 'Hadir pada Kegiatan Dinas Luar'}
+      >
+        <CheckCircle2 size={12} /> Dinas Luar
+      </span>
+    );
+  }
+  if (row.status_keluar === 'MISSING_OUT') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+        title="Melewati batas akhir scan pulang shift (Cut-Off)"
+      >
+        <AlertCircle size={12} /> Tidak Absen Pulang
+      </span>
+    );
+  }
+  if (row.jam_keluar) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+        <CheckCircle2 size={12} /> Sudah Pulang
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+      <Clock size={12} /> Belum Pulang
+    </span>
+  );
+};
+
 export const PhotoThumbnail = ({ row, onSelect }) => {
   const [imgError, setImgError] = useState(false);
   const photoPath = row.foto_masuk || row.foto_presensi || row.foto_keluar;

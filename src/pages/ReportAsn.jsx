@@ -11,6 +11,8 @@ import {
   PhotoThumbnail,
   AttendanceProofModal,
   EmployeeRoleBadge,
+  ShiftBadge,
+  CheckoutStatusBadge,
   formatTanggalIndo,
 } from '../components/AttendancePhotoModal';
 
@@ -29,7 +31,9 @@ const ReportAsn = () => {
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedOpdId, setSelectedOpdId] = useState('');
+  const [selectedShiftId, setSelectedShiftId] = useState('');
   const [opdList, setOpdList] = useState([]);
+  const [shiftList, setShiftList] = useState([]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -37,8 +41,12 @@ const ReportAsn = () => {
   const [selectedProofRow, setSelectedProofRow] = useState(null);
 
   useEffect(() => {
-    if (!isSuperAdmin) return;
     const token = localStorage.getItem('access_token');
+    axios
+      .get(`${API_BASE}/jam-kerja`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => setShiftList(Array.isArray(res.data) ? res.data : res.data?.data || []))
+      .catch(() => {});
+    if (!isSuperAdmin) return;
     axios
       .get(`${API_BASE}/opd`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => setOpdList(Array.isArray(res.data) ? res.data : res.data?.data || []))
@@ -58,6 +66,7 @@ const ReportAsn = () => {
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       if (statusFilter) params.status_filter = statusFilter;
+      if (selectedShiftId) params.jam_kerja_id = selectedShiftId;
       if (isSuperAdmin && selectedOpdId) params.opd_id = selectedOpdId;
 
       const res = await axios.get(`${API_BASE}/report`, {
@@ -99,7 +108,7 @@ const ReportAsn = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter, isSuperAdmin, selectedOpdId]);
+  }, [currentPage, itemsPerPage, searchQuery, startDate, endDate, statusFilter, selectedShiftId, isSuperAdmin, selectedOpdId]);
 
   useEffect(() => {
     fetchReports();
@@ -123,6 +132,7 @@ const ReportAsn = () => {
     setStartDate('');
     setEndDate('');
     setStatusFilter('');
+    setSelectedShiftId('');
     setSelectedOpdId('');
     setCurrentPage(1);
   };
@@ -142,6 +152,7 @@ const ReportAsn = () => {
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       if (statusFilter) params.status_filter = statusFilter;
+      if (selectedShiftId) params.jam_kerja_id = selectedShiftId;
       if (isSuperAdmin && selectedOpdId) params.opd_id = selectedOpdId;
 
       const res = await axios.get(`${API_BASE}/report`, {
@@ -200,7 +211,17 @@ const ReportAsn = () => {
     return pages;
   };
 
-  const hasActiveFilters = Boolean(searchQuery || startDate || endDate || statusFilter || selectedOpdId);
+  const hasActiveFilters = Boolean(searchQuery || startDate || endDate || statusFilter || selectedShiftId || selectedOpdId);
+
+  const toTitleCase = (str) => {
+    if (!str) return "-";
+    return str
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  }
 
   return (
     <div className="space-y-5">
@@ -288,6 +309,29 @@ const ReportAsn = () => {
                   <option value="ON_TIME">Tepat Waktu</option>
                   <option value="LATE">Terlambat</option>
                   <option value="ABSENT">Belum / Tidak Hadir</option>
+                </select>
+                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={15} />
+              </div>
+            </div>
+
+            {/* Shift Jam Kerja */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                Shift Jam Kerja
+              </label>
+              <div className="relative">
+                <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                <select
+                  value={selectedShiftId}
+                  onChange={handleFilterChange(setSelectedShiftId)}
+                  className="w-full pl-9 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
+                >
+                  <option value="">Semua Shift</option>
+                  {shiftList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nama_shift}
+                    </option>
+                  ))}
                 </select>
                 <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={15} />
               </div>
@@ -415,12 +459,13 @@ const ReportAsn = () => {
 
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col">
-                          <span className="font-bold text-slate-900 text-sm leading-snug">{row.nama}</span>
+                          <span className="font-bold text-slate-900 text-sm leading-snug">{toTitleCase(row.nama)}</span>
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="font-mono text-xs text-slate-500 font-medium tracking-tight">
                               {row.nip}
                             </span>
                             <EmployeeRoleBadge role={row.role} />
+                            <ShiftBadge row={row} />
                             {isSuperAdmin && row.nama_opd && (
                               <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md truncate max-w-[160px]" title={row.nama_opd}>
                                 {row.nama_opd}
@@ -494,17 +539,7 @@ const ReportAsn = () => {
                       </td>
 
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
-                        {isAbsent ? (
-                          <span className="text-slate-300 font-mono">—</span>
-                        ) : isCheckedOut ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                            <CheckCircle2 size={12} /> Sudah Pulang
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-                            <Clock size={12} /> Belum Pulang
-                          </span>
-                        )}
+                        <CheckoutStatusBadge row={row} />
                       </td>
 
                       <td className="px-4 py-3.5 text-center">

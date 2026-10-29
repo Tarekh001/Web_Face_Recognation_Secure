@@ -4,7 +4,7 @@ import {
   LayoutDashboard, UserPlus, LogOut, Users, 
   Building2, UserCog, MonitorSmartphone, ChevronDown, 
   History, Settings, CalendarDays, ClipboardList, UserSquare2,
-  FileText, SlidersHorizontal, X, Sparkles
+  FileText, SlidersHorizontal, X, Sparkles, Clock
 } from 'lucide-react';
 
 const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, onLogout }) => {
@@ -12,7 +12,7 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
 
   // Dropdown states
   const [personelOpen, setPersonelOpen] = useState(
-    location.pathname.startsWith('/manage') || location.pathname.startsWith('/register')
+    location.pathname.startsWith('/manage') || location.pathname.startsWith('/register') || location.pathname.startsWith('/jam-kerja')
   );
   const [laporanOpen, setLaporanOpen] = useState(
     location.pathname.startsWith('/laporan')
@@ -196,6 +196,7 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
             >
               <NavItem to="/manage-asn" icon={UserSquare2} label="Data ASN" badge="ASN" />
               <NavItem to="/manage-non-asn" icon={UserSquare2} label="Data Non-ASN" badge="Non-ASN" />
+              <NavItem to="/jam-kerja" icon={Clock} label="Jam Kerja & Shift" />
               <NavItem to="/register" icon={UserPlus} label="Pendaftaran Wajah" />
             </NavDropdown>
           </div>
