@@ -1,27 +1,90 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import Swal from 'sweetalert2';
 import {
-  Clock, CalendarRange, Users, Plus, Edit3, Trash2, CheckSquare,
-  Square, ArrowLeftRight, Moon, Sun, ShieldAlert, Building2,
-  Search, Filter, RefreshCw, Sparkles, CheckCircle2, Info, CalendarDays, Save, X
+  Clock,
+  CalendarRange,
+  Users,
+  Plus,
+  Edit3,
+  Trash2,
+  ArrowLeftRight,
+  Moon,
+  Sun,
+  ShieldAlert,
+  Building2,
+  Search,
+  RefreshCw,
+  CheckCircle2,
+  Info,
+  CalendarDays,
+  Save,
+  X,
+  Loader2,
 } from 'lucide-react';
 import API_BASE from '../config/api';
+import {
+  useModalEscape,
+  ErrorBanner,
+  TableLoadingRow,
+  TableErrorRow,
+  notifyAlert,
+  confirmAction,
+} from '../components/UiFeedback';
 
 const API_URL = API_BASE;
 
 const MONTH_NAMES = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
 ];
 
+// Palet Terkendali Lulus WCAG AA >= 4.5:1 (R-25 & R-29)
 const SHIFT_COLOR_PALETTE = [
-  { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', pill: 'bg-blue-600 text-white', code: 'REG' },
-  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', pill: 'bg-emerald-600 text-white', code: 'PAGI' },
-  { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', pill: 'bg-amber-500 text-white', code: 'SIANG' },
-  { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', pill: 'bg-purple-600 text-white', code: 'MALAM' },
-  { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', pill: 'bg-rose-600 text-white', code: 'KHUSUS' },
-  { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', pill: 'bg-cyan-600 text-white', code: 'OPS' },
+  {
+    bg: 'bg-blue-50',
+    text: 'text-blue-800',
+    border: 'border-blue-300',
+    pill: 'bg-blue-700 text-white border-blue-800',
+    code: 'REG',
+  },
+  {
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-800',
+    border: 'border-emerald-300',
+    pill: 'bg-emerald-700 text-white border-emerald-800',
+    code: 'PAGI',
+  },
+  {
+    bg: 'bg-amber-50',
+    text: 'text-amber-900',
+    border: 'border-amber-300',
+    pill: 'bg-amber-100 text-amber-950 border-amber-400',
+    code: 'SIANG',
+  },
+  {
+    bg: 'bg-slate-100',
+    text: 'text-slate-900',
+    border: 'border-slate-400',
+    pill: 'bg-slate-900 text-white border-slate-950',
+    code: 'MALAM',
+  },
+  {
+    bg: 'bg-red-50',
+    text: 'text-red-800',
+    border: 'border-red-300',
+    pill: 'bg-red-700 text-white border-red-800',
+    code: 'OPS',
+  },
 ];
 
 const getShiftStyle = (shift) => {
@@ -53,6 +116,7 @@ const JamKerjaPage = () => {
   const [shifts, setShifts] = useState([]);
   const [opdList, setOpdList] = useState([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
+  const [shiftError, setShiftError] = useState('');
 
   // Filter OPD global (khusus Super Admin)
   const [selectedOpd, setSelectedOpd] = useState('');
@@ -85,14 +149,15 @@ const JamKerjaPage = () => {
   const [rosterMap, setRosterMap] = useState({});
   const [daysInMonth, setDaysInMonth] = useState(30);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterError, setRosterError] = useState('');
 
   // Bulk Assign state (Tab 2)
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [bulkShiftId, setBulkShiftId] = useState('');
 
   // Roster interactive painting & modals (Tab 3)
-  const [activeBrushShiftId, setActiveBrushShiftId] = useState(null); // shift.id or 0 for reset
-  const [pendingEntries, setPendingEntries] = useState({}); // key `${user_id}_${YYYY-MM-DD}` -> { user_id, tanggal, jam_kerja_id, keterangan }
+  const [activeBrushShiftId, setActiveBrushShiftId] = useState(null);
+  const [pendingEntries, setPendingEntries] = useState({});
   const [showRangeModal, setShowRangeModal] = useState(false);
   const [rangeForm, setRangeForm] = useState({
     user_ids: [],
@@ -110,35 +175,41 @@ const JamKerjaPage = () => {
     keterangan: '',
   });
 
+  useModalEscape(showShiftModal, () => setShowShiftModal(false));
+  useModalEscape(showRangeModal, () => setShowRangeModal(false));
+  useModalEscape(showSwapModal, () => setShowSwapModal(false));
+
   // Load OPD List for Super Admin
   useEffect(() => {
     if (userRole === 'super_admin') {
-      axios.get(`${API_URL}/opd`, { headers })
-        .then((res) => setOpdList(Array.isArray(res.data) ? res.data : (res.data?.data || [])))
+      axios
+        .get(`${API_URL}/opd`, { headers })
+        .then((res) => setOpdList(Array.isArray(res.data) ? res.data : res.data?.data || []))
         .catch(() => {});
     }
   }, [userRole, headers]);
 
-  const fetchShifts = async () => {
+  const fetchShifts = useCallback(async () => {
     setLoadingShifts(true);
+    setShiftError('');
     try {
       const params = {};
       if (selectedOpd) params.opd_id = selectedOpd;
       const res = await axios.get(`${API_URL}/jam-kerja`, { headers, params });
-      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
       setShifts(list);
-      if (list.length > 0 && activeBrushShiftId === null) {
-        setActiveBrushShiftId(list[0].id);
-      }
+      setActiveBrushShiftId((prev) => (prev === null && list.length > 0 ? list[0].id : prev));
     } catch (err) {
       console.error('Gagal memuat profil jam kerja:', err);
+      setShiftError(err.response?.data?.error || 'Tidak dapat memuat daftar profil jam kerja dari server.');
     } finally {
       setLoadingShifts(false);
     }
-  };
+  }, [selectedOpd, headers]);
 
-  const fetchRosterAndEmployees = async () => {
+  const fetchRosterAndEmployees = useCallback(async () => {
     setLoadingRoster(true);
+    setRosterError('');
     try {
       const params = { bulan, tahun };
       if (selectedOpd) params.opd_id = selectedOpd;
@@ -150,22 +221,25 @@ const JamKerjaPage = () => {
       setPendingEntries({});
     } catch (err) {
       console.error('Gagal memuat data roster:', err);
+      setRosterError(err.response?.data?.error || 'Tidak dapat memuat data penugasan shift dan roster pegawai.');
     } finally {
       setLoadingRoster(false);
     }
-  };
+  }, [bulan, tahun, selectedOpd, roleFilter, headers]);
 
   useEffect(() => {
     fetchShifts();
-  }, [selectedOpd]);
+  }, [fetchShifts]);
 
   useEffect(() => {
     fetchRosterAndEmployees();
-  }, [bulan, tahun, selectedOpd, roleFilter]);
+  }, [fetchRosterAndEmployees]);
 
   const shiftsById = useMemo(() => {
     const map = {};
-    shifts.forEach((s) => { map[s.id] = s; });
+    shifts.forEach((s) => {
+      map[s.id] = s;
+    });
     return map;
   }, [shifts]);
 
@@ -184,7 +258,7 @@ const JamKerjaPage = () => {
     });
   }, [employees, searchEmp, filterShiftDefault]);
 
-  // ── HANDLERS TAB 1: MASTER JAM KERJA ──
+  // HANDLERS TAB 1: MASTER JAM KERJA
   const openCreateShiftModal = () => {
     setEditingShift(null);
     setShiftForm({
@@ -226,61 +300,87 @@ const JamKerjaPage = () => {
     try {
       if (editingShift) {
         await axios.put(`${API_URL}/jam-kerja/${editingShift.id}`, shiftForm, { headers });
-        Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Profil jam kerja berhasil diperbarui.', timer: 1600, showConfirmButton: false });
+        notifyAlert({
+          icon: 'success',
+          title: 'Berhasil',
+          text: 'Profil jam kerja berhasil diperbarui.',
+          timer: 1600,
+        });
       } else {
         await axios.post(`${API_URL}/jam-kerja`, shiftForm, { headers });
-        Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Profil jam kerja baru berhasil ditambahkan.', timer: 1600, showConfirmButton: false });
+        notifyAlert({
+          icon: 'success',
+          title: 'Berhasil',
+          text: 'Profil jam kerja baru berhasil ditambahkan.',
+          timer: 1600,
+        });
       }
       setShowShiftModal(false);
       fetchShifts();
       fetchRosterAndEmployees();
     } catch (err) {
-      Swal.fire('Gagal', err.response?.data?.error || 'Terjadi kesalahan saat menyimpan profil jam kerja.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menyimpan',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menyimpan profil jam kerja.',
+      });
     }
   };
 
   const handleDeleteShift = async (shift) => {
-    const confirm = await Swal.fire({
-      icon: 'warning',
+    const ok = await confirmAction({
       title: `Hapus ${shift.nama_shift}?`,
       text: 'Pegawai yang menggunakan shift ini sebagai default akan dikembalikan ke Reguler Global.',
-      showCancelButton: true,
-      confirmButtonColor: '#DC2626',
-      confirmButtonText: 'Ya, Hapus',
-      cancelButtonText: 'Batal',
+      confirmText: 'Ya, Hapus',
     });
-    if (!confirm.isConfirmed) return;
+    if (!ok) return;
 
     try {
       await axios.delete(`${API_URL}/jam-kerja/${shift.id}`, { headers });
-      Swal.fire({ icon: 'success', title: 'Terhapus', text: 'Profil jam kerja berhasil dihapus.', timer: 1500, showConfirmButton: false });
+      notifyAlert({
+        icon: 'success',
+        title: 'Terhapus',
+        text: 'Profil jam kerja berhasil dihapus.',
+        timer: 1500,
+      });
       fetchShifts();
       fetchRosterAndEmployees();
     } catch (err) {
-      Swal.fire('Tidak Dapat Dihapus', err.response?.data?.error || 'Gagal menghapus profil jam kerja.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Tidak Dapat Dihapus',
+        text: err.response?.data?.error || 'Gagal menghapus profil jam kerja.',
+      });
     }
   };
 
-  // ── HANDLERS TAB 2: PENUGASAN SHIFT PEGAWAI ──
-  const handleSingleAssignShift = async (userId, newShiftId) => {
+  // HANDLERS TAB 2: PENUGASAN SHIFT PEGAWAI
+  const handleSingleAssignShift = async (userId, newShiftId, empRole = '', empNip = '') => {
+    const matchedEmp = employees.find((e) => e.user_id === userId && (!empRole || e.role === empRole));
     try {
       const res = await axios.put(
         `${API_URL}/users/${userId}/jam-kerja`,
-        { jam_kerja_id: newShiftId || null },
+        {
+          jam_kerja_id: newShiftId || null,
+          role: empRole || matchedEmp?.role || '',
+          nip: empNip || matchedEmp?.nip || '',
+        },
         { headers }
       );
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
+      notifyAlert({
         icon: 'success',
-        title: res.data?.message || 'Shift pegawai diperbarui',
-        showConfirmButton: false,
-        timer: 1800,
+        title: 'Tersimpan',
+        text: res.data?.message || 'Shift default pegawai berhasil diperbarui.',
+        timer: 1600,
       });
       fetchRosterAndEmployees();
       fetchShifts();
     } catch (err) {
-      Swal.fire('Gagal', err.response?.data?.error || 'Gagal mengubah shift pegawai.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal',
+        text: err.response?.data?.error || 'Gagal mengubah shift pegawai.',
+      });
     }
   };
 
@@ -307,44 +407,51 @@ const JamKerjaPage = () => {
         `${API_URL}/users/bulk-jam-kerja`,
         {
           user_ids: selectedUserIds,
-          jam_kerja_id: bulkShiftId === 'RESET' ? null : (bulkShiftId || null),
+          jam_kerja_id: bulkShiftId === 'RESET' ? null : bulkShiftId || null,
         },
         { headers }
       );
-      Swal.fire({
+      notifyAlert({
         icon: 'success',
         title: 'Penugasan Massal Berhasil',
-        text: res.data?.message,
+        text: res.data?.message || 'Shift berhasil diterapkan ke pegawai terpilih.',
         timer: 1800,
-        showConfirmButton: false,
       });
       setSelectedUserIds([]);
       fetchRosterAndEmployees();
       fetchShifts();
     } catch (err) {
-      Swal.fire('Gagal', err.response?.data?.error || 'Gagal menerapkan shift massal.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal',
+        text: err.response?.data?.error || 'Gagal menerapkan shift massal.',
+      });
     }
   };
 
-  // ── HANDLERS TAB 3: ROSTER BULANAN & TUKAR JAGA ──
+  // HANDLERS TAB 3: ROSTER BULANAN & TUKAR JAGA
   const handleCellClick = (emp, dayNumber) => {
     if (activeBrushShiftId === null) {
-      Swal.fire('Pilih Kuas Shift', 'Silakan pilih salah satu kuas Shift di bagian atas tabel sebelum mengeklik tanggal.', 'info');
+      notifyAlert({
+        icon: 'info',
+        title: 'Pilih Kuas Shift',
+        text: 'Pilih salah satu tombol kuas shift di atas matriks sebelum mengeklik tanggal.',
+      });
       return;
     }
     const dateStr = `${tahun}-${String(bulan).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
     const key = `${emp.user_id}_${dateStr}`;
 
-    setPendingEntries((prev) => {
-      const next = { ...prev };
-      next[key] = {
+    setPendingEntries((prev) => ({
+      ...prev,
+      [key]: {
         user_id: emp.user_id,
+        role: emp.role,
         tanggal: dateStr,
         jam_kerja_id: activeBrushShiftId === 0 ? null : activeBrushShiftId,
         keterangan: activeBrushShiftId === 0 ? '' : 'Roster Bulanan',
-      };
-      return next;
-    });
+      },
+    }));
   };
 
   const handleSavePendingRoster = async () => {
@@ -352,30 +459,33 @@ const JamKerjaPage = () => {
     if (entries.length === 0) return;
     try {
       const res = await axios.post(`${API_URL}/roster/batch`, { entries }, { headers });
-      Swal.fire({
+      notifyAlert({
         icon: 'success',
         title: 'Roster Tersimpan',
-        text: res.data?.message,
+        text: res.data?.message || 'Perubahan jadwal roster berhasil disimpan.',
         timer: 1800,
-        showConfirmButton: false,
       });
       fetchRosterAndEmployees();
       fetchShifts();
     } catch (err) {
-      Swal.fire('Gagal Menyimpan Roster', err.response?.data?.error || 'Terjadi kesalahan.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menyimpan Roster',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menyimpan matriks roster.',
+      });
     }
   };
 
   const handleSubmitRangeRoster = async (e) => {
     e.preventDefault();
     if (!rangeForm.user_ids.length) {
-      Swal.fire('Perhatian', 'Pilih minimal 1 pegawai.', 'warning');
+      notifyAlert({ icon: 'warning', title: 'Perhatian', text: 'Pilih minimal 1 pegawai.' });
       return;
     }
     const start = new Date(rangeForm.start_date);
     const end = new Date(rangeForm.end_date);
-    if (isNaN(start) || isNaN(end) || end < start) {
-      Swal.fire('Perhatian', 'Rentang tanggal tidak valid.', 'warning');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      notifyAlert({ icon: 'warning', title: 'Perhatian', text: 'Rentang tanggal tidak valid.' });
       return;
     }
 
@@ -397,12 +507,21 @@ const JamKerjaPage = () => {
 
     try {
       const res = await axios.post(`${API_URL}/roster/batch`, { entries }, { headers });
-      Swal.fire({ icon: 'success', title: 'Berhasil', text: res.data?.message, timer: 1800, showConfirmButton: false });
+      notifyAlert({
+        icon: 'success',
+        title: 'Berhasil',
+        text: res.data?.message || 'Plotting rentang tanggal berhasil disimpan.',
+        timer: 1800,
+      });
       setShowRangeModal(false);
       fetchRosterAndEmployees();
       fetchShifts();
     } catch (err) {
-      Swal.fire('Gagal', err.response?.data?.error || 'Gagal menyimpan rentang roster.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal',
+        text: err.response?.data?.error || 'Gagal menyimpan rentang roster.',
+      });
     }
   };
 
@@ -410,117 +529,158 @@ const JamKerjaPage = () => {
     e.preventDefault();
     try {
       const res = await axios.put(`${API_URL}/roster/swap`, swapForm, { headers });
-      Swal.fire({ icon: 'success', title: 'Tukar Jaga Berhasil', text: res.data?.message, timer: 2000, showConfirmButton: false });
+      notifyAlert({
+        icon: 'success',
+        title: 'Tukar Jaga Berhasil',
+        text: res.data?.message || 'Jadwal kedua pegawai telah dipertukarkan.',
+        timer: 2000,
+      });
       setShowSwapModal(false);
       fetchRosterAndEmployees();
     } catch (err) {
-      Swal.fire('Gagal Tukar Jaga', err.response?.data?.error || 'Pastikan kedua pegawai berbeda dan tanggal valid.', 'error');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Tukar Jaga',
+        text: err.response?.data?.error || 'Pastikan kedua pegawai berbeda dan tanggal valid.',
+      });
     }
   };
 
   const pendingCount = Object.keys(pendingEntries).length;
+  const allFilteredSelected =
+    filteredEmployees.length > 0 &&
+    filteredEmployees.every((e) => selectedUserIds.includes(e.user_id));
 
   return (
     <div className="space-y-6 pb-10">
-      {/* Top Banner Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-800/80 relative overflow-hidden">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-bold uppercase tracking-wider">
-              <Sparkles size={13} />
-              Core Shift Engine v2.0 • 5 Aturan Baku Presensi
+      {/* Header Otoritatif (Solid High-Contrast Surface) */}
+      <div className="surface-card p-5 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
+              <Clock size={22} aria-hidden="true" />
             </div>
-            <h2 className="text-2xl font-extrabold tracking-tight">
-              Manajemen Jam Kerja & Sistem Roster Shift
-            </h2>
-            <p className="text-slate-300 text-sm max-w-3xl">
-              Kelola profil jam kerja reguler & operasional 24/7 (RSUD, Satpol PP, Dishub, BPBD), penugasan shift default pegawai, hingga plotting roster bulanan lintas hari dan tukar jaga.
-            </p>
+            <div>
+              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+                Manajemen Jam Kerja dan Roster Shift
+              </h2>
+              <p className="text-slate-600 text-xs sm:text-sm mt-1 max-w-3xl leading-relaxed">
+                Kelola profil jam kerja reguler dan operasional 24 jam (RSUD, Satpol PP, Dishub, BPBD), penugasan shift default pegawai, serta jadwal roster bulanan dan tukar jaga.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {userRole === 'super_admin' && (
-              <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2">
-                <Building2 size={16} className="text-blue-400 shrink-0" />
-                <select
-                  value={selectedOpd}
-                  onChange={(e) => setSelectedOpd(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-white focus:outline-none"
-                >
-                  <option value="" className="text-slate-900">Semua Instansi OPD (Global)</option>
-                  {opdList.map((opd) => (
-                    <option key={opd.id} value={opd.id} className="text-slate-900">
-                      {opd.nama_opd}
-                    </option>
-                  ))}
-                </select>
+              <div className="w-full sm:w-auto">
+                <label htmlFor="jamkerja-opd-filter" className="sr-only">
+                  Filter Instansi OPD
+                </label>
+                <div className="relative">
+                  <Building2
+                    size={16}
+                    aria-hidden="true"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                  />
+                  <select
+                    id="jamkerja-opd-filter"
+                    value={selectedOpd}
+                    onChange={(e) => setSelectedOpd(e.target.value)}
+                    className="gov-select pl-9 pr-8 text-xs sm:text-sm font-semibold min-w-[230px]"
+                  >
+                    <option value="">Semua Instansi OPD (Global)</option>
+                    {opdList.map((opd) => (
+                      <option key={opd.id} value={opd.id}>
+                        {opd.nama_opd || opd.nama}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
 
             <button
-              onClick={() => { fetchShifts(); fetchRosterAndEmployees(); }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition cursor-pointer"
+              type="button"
+              onClick={() => {
+                fetchShifts();
+                fetchRosterAndEmployees();
+              }}
+              className="gov-btn-secondary"
             >
-              <RefreshCw size={15} />
-              Segarkan Data
+              <RefreshCw size={15} aria-hidden="true" />
+              <span>Muat Ulang Data</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-soft-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
+      {/* Navigasi Tab */}
+      <div className="surface-card p-3 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Menu Manajemen Jam Kerja" className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'master'}
             onClick={() => setActiveTab('master')}
-            className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all active:translate-y-px ${
               activeTab === 'master'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-blue-700 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
             }`}
           >
-            <Clock size={17} />
-            1. Master Profil Jam Kerja
-            <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'master' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            <Clock size={16} aria-hidden="true" />
+            <span>1. Master Profil Jam Kerja</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-md font-mono tabular-nums ${
+                activeTab === 'master' ? 'bg-blue-900 text-white' : 'bg-white text-slate-700 border border-slate-300'
+              }`}
+            >
               {shifts.length}
             </span>
           </button>
 
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'penugasan'}
             onClick={() => setActiveTab('penugasan')}
-            className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all active:translate-y-px ${
               activeTab === 'penugasan'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-blue-700 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
             }`}
           >
-            <Users size={17} />
-            2. Penugasan Shift Pegawai
-            <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'penugasan' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            <Users size={16} aria-hidden="true" />
+            <span>2. Penugasan Shift Pegawai</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-md font-mono tabular-nums ${
+                activeTab === 'penugasan' ? 'bg-blue-900 text-white' : 'bg-white text-slate-700 border border-slate-300'
+              }`}
+            >
               {employees.length}
             </span>
           </button>
 
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'roster'}
             onClick={() => setActiveTab('roster')}
-            className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all active:translate-y-px ${
               activeTab === 'roster'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-blue-700 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
             }`}
           >
-            <CalendarRange size={17} />
-            3. Kalender Roster Bulanan & Tukar Jaga
+            <CalendarRange size={16} aria-hidden="true" />
+            <span>3. Kalender Roster dan Tukar Jaga</span>
           </button>
         </div>
 
-        {(userRole === 'super_admin') && activeTab === 'master' &&  (
-          <button
-            onClick={openCreateShiftModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md shadow-blue-600/20 transition cursor-pointer"
-          >
-            <Plus size={17} />
-            Buat Profil Shift Baru
+        {userRole === 'super_admin' && activeTab === 'master' && (
+          <button type="button" onClick={openCreateShiftModal} className="gov-btn-primary">
+            <Plus size={16} aria-hidden="true" />
+            <span>Buat Profil Shift Baru</span>
           </button>
         )}
       </div>
@@ -529,151 +689,195 @@ const JamKerjaPage = () => {
           TAB 1: MASTER PROFIL JAM KERJA
       ========================================================= */}
       {activeTab === 'master' && (
-        <div className="space-y-6">
-          {/* 5 Core Rules Info Strip */}
+        <div className="space-y-5">
+          {/* Ringkasan Aturan Operasional Shift */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-soft-xs flex items-start gap-3.5">
-              <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600 border border-purple-200 shrink-0">
-                <Moon size={20} />
+            <div className="surface-card p-4 flex items-start gap-3.5">
+              <div className="p-2.5 rounded-lg bg-slate-100 text-slate-800 border border-slate-300 shrink-0">
+                <Moon size={18} aria-hidden="true" />
               </div>
               <div>
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                  Overnight Shift (Lintas Hari)
-                </h4>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Scan pulang pagi hari (misal 06:00 WIB) untuk shift malam otomatis merujuk ke <code className="font-bold text-purple-700">tanggal_tugas</code> hari sebelumnya.
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                  Shift Malam Lintas Hari
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Scan pulang pagi hari (misal 06:00 WIB) pada shift malam otomatis tercatat ke{' '}
+                  <code className="font-bold text-slate-900 bg-slate-100 px-1 py-0.5 rounded">tanggal_tugas</code>{' '}
+                  hari sebelumnya.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-soft-xs flex items-start gap-3.5">
-              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
-                <ShieldAlert size={20} />
+            <div className="surface-card p-4 flex items-start gap-3.5">
+              <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                <ShieldAlert size={18} aria-hidden="true" />
               </div>
               <div>
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                  Abaikan Hari Libur (24/7 Ops)
-                </h4>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Petugas dengan shift berlabel <b>Abaikan Libur</b> tetap dapat absen di Kiosk pada hari Sabtu, Minggu, dan Libur Nasional.
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                  Abaikan Hari Libur (Operasional 24/7)
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Petugas dengan profil berlabel <b>Abaikan Libur</b> tetap dapat melakukan presensi pada hari Sabtu, Minggu, dan Libur Nasional.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-soft-xs flex items-start gap-3.5">
-              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
-                <Info size={20} />
+            <div className="surface-card p-4 flex items-start gap-3.5">
+              <div className="p-2.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 shrink-0">
+                <Info size={18} aria-hidden="true" />
               </div>
               <div>
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                  Cut-Off Tidak Absen Pulang
-                </h4>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Jika pegawai lupa scan pulang hingga melewati <b>Akhir Scan Pulang</b>, sesi otomatis ditutup sebagai <i>Tidak Absen Pulang</i>.
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                  Batas Akhir Scan Pulang
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Apabila pegawai tidak memindai wajah hingga melewati batas <b>Akhir Scan Pulang</b>, sesi otomatis ditutup sebagai <i>Tidak Absen Pulang</i>.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Shift Cards Grid */}
+          <ErrorBanner message={shiftError} onRetry={fetchShifts} />
+
+          {/* Daftar Kartu Shift */}
           {loadingShifts ? (
-            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-500">
-              Memuat daftar profil jam kerja...
+            <div className="surface-card p-12 text-center" role="status" aria-live="polite">
+              <div className="inline-flex flex-col items-center gap-2.5">
+                <Loader2 size={26} className="animate-spin text-blue-700" aria-hidden="true" />
+                <span className="text-sm font-semibold text-slate-700">
+                  Memuat daftar profil jam kerja...
+                </span>
+              </div>
+            </div>
+          ) : !shiftError && shifts.length === 0 ? (
+            <div className="surface-card p-12 text-center">
+              <div className="max-w-md mx-auto space-y-2">
+                <p className="text-base font-bold text-slate-900">Belum Ada Profil Jam Kerja</p>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Belum terdapat profil shift untuk cakupan instansi ini.{' '}
+                  {userRole === 'super_admin'
+                    ? 'Gunakan tombol "Buat Profil Shift Baru" di atas untuk menambahkan jadwal kerja.'
+                    : 'Hubungi Super Admin untuk menambahkan profil shift baru.'}
+                </p>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
               {shifts.map((shift) => {
                 const style = getShiftStyle(shift);
-                const canModify = userRole === 'super_admin' || (shift.opd_id && Number(shift.opd_id) > 0);
+                const canModify =
+                  userRole === 'super_admin' || (shift.opd_id && Number(shift.opd_id) > 0);
                 return (
                   <div
                     key={shift.id}
-                    className="bg-white rounded-2xl border border-slate-200/90 shadow-soft-xs hover:shadow-md transition flex flex-col justify-between overflow-hidden"
+                    className="surface-card flex flex-col justify-between overflow-hidden"
                   >
                     <div>
-                      <div className={`px-5 py-4 border-b ${style.bg} ${style.border} flex items-start justify-between gap-2`}>
+                      <div
+                        className={`px-5 py-4 border-b ${style.bg} ${style.border} flex items-start justify-between gap-2`}
+                      >
                         <div>
-                          <span className={`inline-block text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${style.pill}`}>
-                            {shift.opd_id ? shift.nama_opd : 'Global • Semua OPD'}
+                          <span
+                            className={`inline-block text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${style.pill}`}
+                          >
+                            {shift.opd_id ? shift.nama_opd : 'Global Semua OPD'}
                           </span>
                           <h3 className="text-base font-extrabold text-slate-900 mt-2">
                             {shift.nama_shift}
                           </h3>
                         </div>
                         {shift.is_lintas_hari ? (
-                          <Moon size={20} className="text-purple-600 shrink-0" title="Shift Lintas Hari" />
+                          <Moon
+                            size={20}
+                            className="text-slate-800 shrink-0"
+                            aria-label="Shift Lintas Hari"
+                          />
                         ) : (
-                          <Sun size={20} className="text-amber-500 shrink-0" title="Shift Hari yang Sama" />
+                          <Sun
+                            size={20}
+                            className="text-amber-700 shrink-0"
+                            aria-label="Shift Hari yang Sama"
+                          />
                         )}
                       </div>
 
                       <div className="p-5 space-y-3 text-xs">
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
-                          <span className="text-slate-500 font-medium">Jam Kerja Baku</span>
-                          <span className="font-extrabold text-slate-900 text-sm">
-                            {shift.jam_masuk_str || shift.jam_masuk} – {shift.jam_pulang_str || shift.jam_pulang}
+                        <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
+                          <span className="text-slate-600 font-semibold">Jam Kerja Baku</span>
+                          <span className="font-extrabold text-slate-900 text-sm font-mono tabular-nums">
+                            {shift.jam_masuk_str || shift.jam_masuk} s.d.{' '}
+                            {shift.jam_pulang_str || shift.jam_pulang}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500 font-medium">Jendela Scan Masuk</span>
-                          <span className="font-bold text-blue-700">
-                            {shift.mulai_scan_masuk_str || shift.mulai_scan_masuk} – {shift.akhir_scan_masuk_str || shift.akhir_scan_masuk}
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-600 font-semibold">Jendela Scan Masuk</span>
+                          <span className="font-bold text-blue-800 font-mono tabular-nums">
+                            {shift.mulai_scan_masuk_str || shift.mulai_scan_masuk} s.d.{' '}
+                            {shift.akhir_scan_masuk_str || shift.akhir_scan_masuk}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500 font-medium">Jendela Scan Pulang</span>
-                          <span className="font-bold text-emerald-700">
-                            {shift.mulai_scan_pulang_str || shift.mulai_scan_pulang} – {shift.akhir_scan_pulang_str || shift.akhir_scan_pulang}
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-600 font-semibold">Jendela Scan Pulang</span>
+                          <span className="font-bold text-emerald-800 font-mono tabular-nums">
+                            {shift.mulai_scan_pulang_str || shift.mulai_scan_pulang} s.d.{' '}
+                            {shift.akhir_scan_pulang_str || shift.akhir_scan_pulang}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500 font-medium">Toleransi (Batas Telat)</span>
-                          <span className="font-bold text-amber-700">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-600 font-semibold">Toleransi Terlambat</span>
+                          <span className="font-bold text-amber-900 font-mono tabular-nums">
                             {shift.menit_toleransi} mnt ({shift.batas_masuk_str || shift.batas_masuk})
                           </span>
                         </div>
 
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {shift.is_lintas_hari && (
-                            <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 font-bold text-[11px]">
-                              🌙 Lintas Hari (Overnight)
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-900 border border-slate-300 font-bold text-[11px]">
+                              <Moon size={12} aria-hidden="true" />
+                              <span>Lintas Hari (Malam)</span>
                             </span>
                           )}
                           {shift.abaikan_libur ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px]">
-                              ✅ Tetap Masuk Saat Libur
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-[11px]">
+                              <CheckCircle2 size={12} aria-hidden="true" />
+                              <span>Tetap Masuk Saat Libur</span>
                             </span>
                           ) : (
-                            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-semibold text-[11px]">
-                              Libur Akhir Pekan & Nasional
+                            <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-[11px]">
+                              Mengikuti Libur Nasional
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    <div className="px-5 py-3 bg-slate-50 border-t border-slate-200/70 flex items-center justify-between">
-                      <div className="text-[11px] text-slate-500 font-semibold">
-                        <b>{shift.jumlah_pegawai_default || 0}</b> Pegawai • <b>{shift.jumlah_roster_aktif || 0}</b> Roster
+                    <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+                      <div className="text-xs text-slate-700 font-semibold tabular-nums">
+                        <b>{shift.jumlah_pegawai_default || 0}</b> Pegawai,{' '}
+                        <b>{shift.jumlah_roster_aktif || 0}</b> Roster
                       </div>
                       {canModify && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <button
+                            type="button"
                             onClick={() => openEditShiftModal(shift)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
+                            aria-label={`Ubah profil shift ${shift.nama_shift}`}
                             title="Ubah Shift"
+                            className="gov-icon-btn text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-transparent hover:border-blue-200"
                           >
-                            <Edit3 size={15} />
+                            <Edit3 size={16} aria-hidden="true" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteShift(shift)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                            aria-label={`Hapus profil shift ${shift.nama_shift}`}
                             title="Hapus Shift"
+                            className="gov-icon-btn text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={16} aria-hidden="true" />
                           </button>
                         </div>
                       )}
@@ -690,84 +894,123 @@ const JamKerjaPage = () => {
           TAB 2: PENUGASAN SHIFT DEFAULT PEGAWAI
       ========================================================= */}
       {activeTab === 'penugasan' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-soft-xs overflow-hidden">
-          {/* Filter & Bulk Action Header */}
+        <div className="surface-card overflow-hidden">
           <div className="p-5 border-b border-slate-200 space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative w-full sm:w-72">
-                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Cari nama atau NIP pegawai..."
-                    value={searchEmp}
-                    onChange={(e) => setSearchEmp(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+                <div>
+                  <label
+                    htmlFor="penugasan-search"
+                    className="block text-xs font-bold text-slate-700 mb-1.5"
+                  >
+                    Cari Pegawai
+                  </label>
+                  <div className="relative">
+                    <Search
+                      size={16}
+                      aria-hidden="true"
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                    />
+                    <input
+                      id="penugasan-search"
+                      type="text"
+                      placeholder="Nama atau NIP/NIK..."
+                      value={searchEmp}
+                      onChange={(e) => setSearchEmp(e.target.value)}
+                      className="gov-input pl-9"
+                    />
+                  </div>
                 </div>
 
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 text-slate-700"
-                >
-                  <option value="">Semua Kategori (ASN & Non-ASN)</option>
-                  <option value="asn">Personel ASN</option>
-                  <option value="non_asn">Personel Non-ASN</option>
-                </select>
+                <div>
+                  <label
+                    htmlFor="penugasan-role-filter"
+                    className="block text-xs font-bold text-slate-700 mb-1.5"
+                  >
+                    Kategori Personel
+                  </label>
+                  <select
+                    id="penugasan-role-filter"
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="gov-select"
+                  >
+                    <option value="">Semua Kategori (ASN dan Non-ASN)</option>
+                    <option value="asn">Personel ASN</option>
+                    <option value="non_asn">Personel Non-ASN</option>
+                  </select>
+                </div>
 
-                <select
-                  value={filterShiftDefault}
-                  onChange={(e) => setFilterShiftDefault(e.target.value)}
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 text-slate-700"
-                >
-                  <option value="">Semua Shift Default</option>
-                  <option value="DEFAULT">Mengikuti Default Reguler</option>
-                  {shifts.map((s) => (
-                    <option key={s.id} value={s.id}>{s.nama_shift}</option>
-                  ))}
-                </select>
+                <div>
+                  <label
+                    htmlFor="penugasan-shift-filter"
+                    className="block text-xs font-bold text-slate-700 mb-1.5"
+                  >
+                    Filter Shift Default
+                  </label>
+                  <select
+                    id="penugasan-shift-filter"
+                    value={filterShiftDefault}
+                    onChange={(e) => setFilterShiftDefault(e.target.value)}
+                    className="gov-select"
+                  >
+                    <option value="">Semua Shift Default</option>
+                    <option value="DEFAULT">Mengikuti Default Reguler</option>
+                    {shifts.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nama_shift}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="text-xs font-semibold text-slate-500">
+              <div className="text-xs font-semibold text-slate-700 tabular-nums">
                 Menampilkan <b>{filteredEmployees.length}</b> dari <b>{employees.length}</b> personel
               </div>
             </div>
 
-            {/* Bulk Assign Bar */}
+            {/* Bar Penugasan Massal */}
             {selectedUserIds.length > 0 && (
-              <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-blue-900">
-                  <CheckCircle2 size={17} className="text-blue-600" />
-                  <span>{selectedUserIds.length} Pegawai Dipilih</span>
+              <div className="p-4 rounded-lg bg-blue-50 border border-blue-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-blue-950">
+                  <CheckCircle2 size={18} className="text-blue-700 shrink-0" aria-hidden="true" />
+                  <span>{selectedUserIds.length} pegawai dipilih untuk penugasan massal</span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <label htmlFor="bulk-shift-select" className="sr-only">
+                    Pilih Shift Massal
+                  </label>
                   <select
+                    id="bulk-shift-select"
                     value={bulkShiftId}
                     onChange={(e) => setBulkShiftId(e.target.value)}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-300 bg-white text-slate-800"
+                    className="gov-select w-full sm:w-auto min-w-[240px] text-xs font-semibold"
                   >
-                    <option value="">-- Pilih Shift untuk Diterapkan Massal --</option>
-                    <option value="RESET">Reset ke Default Global (Reguler ASN)</option>
+                    <option value="">Pilih Shift untuk Diterapkan</option>
+                    <option value="RESET">Kembalikan ke Default Global (Reguler)</option>
                     {shifts.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.nama_shift} ({s.jam_masuk_str || s.jam_masuk}-{s.jam_pulang_str || s.jam_pulang})
+                        {s.nama_shift} ({s.jam_masuk_str || s.jam_masuk} s.d.{' '}
+                        {s.jam_pulang_str || s.jam_pulang})
                       </option>
                     ))}
                   </select>
 
                   <button
+                    type="button"
                     onClick={handleBulkAssignShift}
                     disabled={!bulkShiftId}
-                    className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer"
+                    className="gov-btn-primary text-xs"
                   >
                     Terapkan ke {selectedUserIds.length} Pegawai
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => setSelectedUserIds([])}
-                    className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+                    className="gov-btn-secondary text-xs"
                   >
                     Batal Pilih
                   </button>
@@ -776,78 +1019,114 @@ const JamKerjaPage = () => {
             )}
           </div>
 
-          {/* Employee Shift Table */}
+          {/* Tabel Penugasan Pegawai */}
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  <th className="py-3.5 px-4 w-10">
-                    <button onClick={toggleSelectAllFiltered} className="text-slate-500 hover:text-blue-600 cursor-pointer">
-                      {filteredEmployees.length > 0 && filteredEmployees.every((e) => selectedUserIds.includes(e.user_id)) ? (
-                        <CheckSquare size={17} className="text-blue-600" />
-                      ) : (
-                        <Square size={17} />
-                      )}
-                    </button>
+                <tr className="bg-slate-50 border-b border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <th className="py-3 px-4 w-12 text-center">
+                    <label className="inline-flex items-center justify-center min-h-[44px] min-w-[44px]">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAllFiltered}
+                        aria-label="Pilih semua pegawai yang ditampilkan"
+                        className="w-4 h-4 rounded accent-blue-700"
+                      />
+                    </label>
                   </th>
-                  <th className="py-3.5 px-4">Nama & NIP Pegawai</th>
+                  <th className="py-3.5 px-4">Nama dan NIP / NIK</th>
                   <th className="py-3.5 px-4">Kategori</th>
                   <th className="py-3.5 px-4">Instansi OPD</th>
                   <th className="py-3.5 px-4">Shift Aktif Saat Ini</th>
                   <th className="py-3.5 px-4">Ubah Shift Default</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredEmployees.length === 0 ? (
+              <tbody className="divide-y divide-slate-200 text-xs sm:text-sm">
+                {loadingRoster ? (
+                  <TableLoadingRow colSpan={6} label="Memuat daftar penugasan shift pegawai..." />
+                ) : rosterError ? (
+                  <TableErrorRow
+                    colSpan={6}
+                    message={rosterError}
+                    onRetry={fetchRosterAndEmployees}
+                  />
+                ) : filteredEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-slate-400">
-                      Tidak ada pegawai yang sesuai dengan filter pencarian.
+                    <td colSpan={6} className="py-14 px-4 text-center">
+                      <p className="text-sm font-bold text-slate-900">
+                        Tidak Ada Personel yang Sesuai
+                      </p>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Ubah kata kunci pencarian atau reset filter kategori dan shift di atas.
+                      </p>
                     </td>
                   </tr>
                 ) : (
                   filteredEmployees.map((emp) => {
                     const checked = selectedUserIds.includes(emp.user_id);
-                    const currentShiftObj = emp.default_jam_kerja_id ? shiftsById[emp.default_jam_kerja_id] : shifts[0];
+                    const currentShiftObj = emp.default_jam_kerja_id
+                      ? shiftsById[emp.default_jam_kerja_id]
+                      : shifts[0];
                     const style = getShiftStyle(currentShiftObj);
                     return (
-                      <tr key={emp.user_id} className={`hover:bg-slate-50/80 transition ${checked ? 'bg-blue-50/40' : ''}`}>
-                        <td className="py-3 px-4">
-                          <button onClick={() => toggleSelectUser(emp.user_id)} className="text-slate-500 hover:text-blue-600 cursor-pointer">
-                            {checked ? <CheckSquare size={17} className="text-blue-600" /> : <Square size={17} />}
-                          </button>
+                      <tr
+                        key={emp.user_id}
+                        className={`hover:bg-slate-50 transition-colors ${
+                          checked ? 'bg-blue-50/60' : ''
+                        }`}
+                      >
+                        <td className="py-2 px-4 text-center">
+                          <label className="inline-flex items-center justify-center min-h-[44px] min-w-[44px]">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleSelectUser(emp.user_id)}
+                              aria-label={`Pilih ${emp.nama}`}
+                              className="w-4 h-4 rounded accent-blue-700"
+                            />
+                          </label>
                         </td>
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900">{emp.nama}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">{emp.nip}</div>
+                          <div className="text-xs text-slate-600 font-mono tabular-nums">
+                            {emp.nip}
+                          </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            emp.role === 'non_asn'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200'
-                          }`}>
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase border ${
+                              emp.role === 'non_asn'
+                                ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                : 'bg-blue-50 text-blue-800 border-blue-300'
+                            }`}
+                          >
                             {emp.role === 'non_asn' ? 'Non-ASN' : 'ASN'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-slate-600 font-medium">
-                          {emp.nama_opd}
-                        </td>
+                        <td className="py-3 px-4 text-slate-700 font-medium">{emp.nama_opd}</td>
                         <td className="py-3 px-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold border ${style.bg} ${style.text} ${style.border}`}>
-                            <Clock size={12} />
-                            {emp.default_nama_shift} ({emp.default_jam_baku})
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border ${style.bg} ${style.text} ${style.border}`}
+                          >
+                            <Clock size={13} aria-hidden="true" />
+                            <span>
+                              {emp.default_nama_shift} ({emp.default_jam_baku})
+                            </span>
                           </span>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-4 min-w-[230px]">
                           <select
+                            aria-label={`Ubah shift default untuk ${emp.nama}`}
                             value={emp.default_jam_kerja_id || ''}
                             onChange={(e) => handleSingleAssignShift(emp.user_id, e.target.value)}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-800 font-semibold focus:outline-none focus:border-blue-500"
+                            className="gov-select text-xs font-semibold"
                           >
                             <option value="">Default Global (Reguler ASN)</option>
                             {shifts.map((s) => (
                               <option key={s.id} value={s.id}>
-                                {s.nama_shift} ({s.jam_masuk_str || s.jam_masuk}-{s.jam_pulang_str || s.jam_pulang})
+                                {s.nama_shift} ({s.jam_masuk_str || s.jam_masuk} s.d.{' '}
+                                {s.jam_pulang_str || s.jam_pulang})
                               </option>
                             ))}
                           </select>
@@ -867,58 +1146,94 @@ const JamKerjaPage = () => {
       ========================================================= */}
       {activeTab === 'roster' && (
         <div className="space-y-4">
-          {/* Roster Controls & Paint Palette */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-soft-xs space-y-4">
-            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-              {/* Month/Year & Search */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                  <CalendarDays size={16} className="text-blue-600 ml-2" />
+          {/* Kontrol Periode, Filter & Palet Kuas */}
+          <div className="surface-card p-5 space-y-4">
+            <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+                <div>
+                  <label htmlFor="roster-bulan" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Bulan Roster
+                  </label>
+                  <div className="relative">
+                    <CalendarDays
+                      size={15}
+                      aria-hidden="true"
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                    />
+                    <select
+                      id="roster-bulan"
+                      value={bulan}
+                      onChange={(e) => setBulan(Number(e.target.value))}
+                      className="gov-select pl-9 font-semibold"
+                    >
+                      {MONTH_NAMES.map((m, idx) => (
+                        <option key={idx + 1} value={idx + 1}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="roster-tahun" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Tahun
+                  </label>
                   <select
-                    value={bulan}
-                    onChange={(e) => setBulan(Number(e.target.value))}
-                    className="bg-transparent px-2 py-1.5 text-xs font-bold text-slate-800 focus:outline-none"
-                  >
-                    {MONTH_NAMES.map((m, idx) => (
-                      <option key={idx + 1} value={idx + 1}>{m}</option>
-                    ))}
-                  </select>
-                  <select
+                    id="roster-tahun"
                     value={tahun}
                     onChange={(e) => setTahun(Number(e.target.value))}
-                    className="bg-transparent px-2 py-1.5 text-xs font-bold text-slate-800 focus:outline-none"
+                    className="gov-select font-semibold tabular-nums"
                   >
                     {[2025, 2026, 2027].map((y) => (
-                      <option key={y} value={y}>{y}</option>
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="relative w-60">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Cari nama / NIP / NIK di roster..."
-                    value={searchEmp}
-                    onChange={(e) => setSearchEmp(e.target.value)}
-                    className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500"
-                  />
+                <div>
+                  <label htmlFor="roster-search" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Cari Personel
+                  </label>
+                  <div className="relative">
+                    <Search
+                      size={15}
+                      aria-hidden="true"
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                    />
+                    <input
+                      id="roster-search"
+                      type="text"
+                      placeholder="Nama / NIP / NIK..."
+                      value={searchEmp}
+                      onChange={(e) => setSearchEmp(e.target.value)}
+                      className="gov-input pl-9"
+                    />
+                  </div>
                 </div>
 
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 cursor-pointer"
-                >
-                  <option value="">Semua Kategori (ASN & Non-ASN)</option>
-                  <option value="asn">Personel ASN</option>
-                  <option value="non_asn">Personel Non-ASN</option>
-                </select>
+                <div>
+                  <label htmlFor="roster-role" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kategori Personel
+                  </label>
+                  <select
+                    id="roster-role"
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="gov-select"
+                  >
+                    <option value="">Semua Kategori (ASN dan Non-ASN)</option>
+                    <option value="asn">Personel ASN</option>
+                    <option value="non_asn">Personel Non-ASN</option>
+                  </select>
+                </div>
               </div>
 
-              {/* Action Buttons: Plotting Rentang & Tukar Jaga */}
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
+                  type="button"
                   onClick={() => {
                     setRangeForm((prev) => ({
                       ...prev,
@@ -926,35 +1241,56 @@ const JamKerjaPage = () => {
                     }));
                     setShowRangeModal(true);
                   }}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+                  className="gov-btn-primary text-xs"
                 >
-                  <CalendarRange size={15} />
-                  Plotting Rentang Tanggal
+                  <CalendarRange size={15} aria-hidden="true" />
+                  <span>Plotting Rentang Tanggal</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setShowSwapModal(true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition cursor-pointer"
+                  className="gov-btn-secondary text-xs"
                 >
-                  <ArrowLeftRight size={15} />
-                  Tukar Jaga Pegawai
+                  <ArrowLeftRight size={15} aria-hidden="true" />
+                  <span>Tukar Jaga Pegawai</span>
                 </button>
-
-                {pendingCount > 0 && (
-                  <button
-                    onClick={handleSavePendingRoster}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 animate-pulse cursor-pointer"
-                  >
-                    <Save size={15} />
-                    Simpan {pendingCount} Perubahan Roster
-                  </button>
-                )}
               </div>
             </div>
 
-            {/* Interactive Brush Palette */}
-            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">
+            {/* Banner Perubahan Roster Belum Disimpan (Kontras Tinggi Lulus WCAG AA tanpa Animasi Berulang) */}
+            {pendingCount > 0 && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="p-4 rounded-lg bg-amber-50 border border-amber-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              >
+                <div className="text-xs sm:text-sm font-bold text-amber-950">
+                  Terdapat <span className="tabular-nums underline">{pendingCount}</span> sel jadwal roster yang telah diubah dan belum disimpan ke server.
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingEntries({})}
+                    className="gov-btn-secondary text-xs"
+                  >
+                    Batalkan Perubahan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePendingRoster}
+                    className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 active:translate-y-px text-white text-xs font-bold transition-all"
+                  >
+                    <Save size={15} aria-hidden="true" />
+                    <span>Simpan {pendingCount} Perubahan Roster</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Palet Kuas Klik Cepat */}
+            <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 mr-1">
                 Kuas Klik Cepat Tanggal:
               </span>
               {shifts.map((s) => {
@@ -963,14 +1299,16 @@ const JamKerjaPage = () => {
                 return (
                   <button
                     key={s.id}
+                    type="button"
+                    aria-pressed={isSelected}
                     onClick={() => setActiveBrushShiftId(s.id)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    className={`inline-flex items-center gap-2 min-h-[44px] px-3.5 py-2 rounded-lg text-xs font-bold border transition-all active:translate-y-px ${
                       isSelected
-                        ? `${style.pill} border-transparent ring-2 ring-offset-1 ring-blue-500 shadow-sm`
-                        : `${style.bg} ${style.text} ${style.border} hover:opacity-90`
+                        ? `${style.pill} ring-2 ring-offset-1 ring-blue-700`
+                        : `${style.bg} ${style.text} ${style.border} hover:brightness-95`
                     }`}
                   >
-                    <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-black/10">
+                    <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-black/10">
                       {getShortShiftCode(s.nama_shift)}
                     </span>
                     <span>{s.nama_shift}</span>
@@ -979,11 +1317,13 @@ const JamKerjaPage = () => {
               })}
 
               <button
+                type="button"
+                aria-pressed={activeBrushShiftId === 0}
                 onClick={() => setActiveBrushShiftId(0)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-lg text-xs font-bold border transition-all active:translate-y-px ${
                   activeBrushShiftId === 0
-                    ? 'bg-slate-800 text-white border-slate-800 ring-2 ring-offset-1 ring-slate-600'
-                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                    ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-offset-1 ring-blue-700'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
                 }`}
               >
                 Reset ke Default
@@ -991,13 +1331,13 @@ const JamKerjaPage = () => {
             </div>
           </div>
 
-          {/* Monthly Matrix Grid */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-soft-xs overflow-hidden">
+          {/* Matriks Kalender Bulanan (Sel <button> Aksesibel >= 44x44px) */}
+          <div className="surface-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-900 text-white text-[10px] font-bold uppercase">
-                    <th className="sticky left-0 z-20 bg-slate-900 py-3 px-4 min-w-[210px] border-r border-slate-800">
+                  <tr className="bg-slate-900 text-white text-[11px] font-bold uppercase">
+                    <th className="sticky left-0 z-20 bg-slate-900 py-3 px-4 min-w-[220px] border-r border-slate-700">
                       Pegawai ({filteredEmployees.length})
                     </th>
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
@@ -1006,12 +1346,12 @@ const JamKerjaPage = () => {
                       return (
                         <th
                           key={day}
-                          className={`py-2.5 px-1.5 text-center min-w-[40px] border-r border-slate-800 ${
-                            isWeekend ? 'bg-red-950/70 text-red-200' : ''
+                          className={`py-2.5 px-1 text-center min-w-[48px] border-r border-slate-800 tabular-nums ${
+                            isWeekend ? 'bg-red-950 text-red-100' : ''
                           }`}
                         >
                           <div>{day}</div>
-                          <div className="text-[8px] font-normal opacity-75">
+                          <div className="text-[10px] font-medium text-slate-300">
                             {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][dObj.getDay()]}
                           </div>
                         </th>
@@ -1021,36 +1361,51 @@ const JamKerjaPage = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-xs">
                   {loadingRoster ? (
-                    <tr>
-                      <td colSpan={daysInMonth + 1} className="py-12 text-center text-slate-400">
-                        Memuat matriks kalender roster...
-                      </td>
-                    </tr>
+                    <TableLoadingRow
+                      colSpan={daysInMonth + 1}
+                      label="Memuat matriks kalender roster bulanan..."
+                    />
+                  ) : rosterError ? (
+                    <TableErrorRow
+                      colSpan={daysInMonth + 1}
+                      message={rosterError}
+                      onRetry={fetchRosterAndEmployees}
+                    />
                   ) : filteredEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan={daysInMonth + 1} className="py-12 text-center text-slate-400">
-                        Tidak ada personel ditemukan.
+                      <td colSpan={daysInMonth + 1} className="py-14 px-4 text-center">
+                        <p className="text-sm font-bold text-slate-900">
+                          Tidak Ada Personel Ditemukan
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Periksa filter kategori atau kata kunci pencarian nama/NIP di atas.
+                        </p>
                       </td>
                     </tr>
                   ) : (
                     filteredEmployees.map((emp) => {
                       const empRoster = rosterMap[String(emp.user_id)] || {};
                       return (
-                        <tr key={emp.user_id} className="hover:bg-slate-50/70">
-                          <td className="sticky left-0 z-10 bg-white py-2.5 px-4 border-r border-slate-200 shadow-xs">
+                        <tr key={emp.user_id} className="hover:bg-slate-50">
+                          <td className="sticky left-0 z-10 bg-white py-2.5 px-4 border-r border-slate-300">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-800 truncate max-w-[140px]" title={emp.nama}>
+                              <span
+                                className="font-bold text-slate-900 truncate max-w-[140px]"
+                                title={emp.nama}
+                              >
                                 {emp.nama}
                               </span>
-                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0 ${
-                                emp.role === 'non_asn'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
-                              }`}>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 border ${
+                                  emp.role === 'non_asn'
+                                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                    : 'bg-blue-50 text-blue-800 border-blue-300'
+                                }`}
+                              >
                                 {emp.role === 'non_asn' ? 'Non-ASN' : 'ASN'}
                               </span>
                             </div>
-                            <div className="text-[10px] text-slate-400 truncate">
+                            <div className="text-[11px] text-slate-600 truncate mt-0.5">
                               Default: {emp.default_nama_shift}
                             </div>
                           </td>
@@ -1068,12 +1423,14 @@ const JamKerjaPage = () => {
                               activeShiftId = pendingItem.jam_kerja_id;
                               isRosterOverride = activeShiftId !== null;
                               tooltip = activeShiftId
-                                ? `[Belum Disimpan] ${shiftsById[activeShiftId]?.nama_shift || ''}`
-                                : '[Belum Disimpan] Reset ke Default';
+                                ? `Belum Disimpan: ${shiftsById[activeShiftId]?.nama_shift || ''}`
+                                : 'Belum Disimpan: Reset ke Default';
                             } else if (savedItem) {
                               activeShiftId = savedItem.jam_kerja_id;
                               isRosterOverride = true;
-                              tooltip = `Roster: ${savedItem.nama_shift} (${savedItem.jam_baku})${savedItem.keterangan ? ' • ' + savedItem.keterangan : ''}`;
+                              tooltip = `Roster: ${savedItem.nama_shift} (${savedItem.jam_baku})${
+                                savedItem.keterangan ? ', ' + savedItem.keterangan : ''
+                              }`;
                             } else {
                               activeShiftId = emp.default_jam_kerja_id;
                             }
@@ -1085,21 +1442,27 @@ const JamKerjaPage = () => {
                             return (
                               <td
                                 key={day}
-                                onClick={() => handleCellClick(emp, day)}
-                                title={tooltip}
-                                className={`p-1 text-center border-r border-slate-100 cursor-pointer select-none transition ${
-                                  pendingItem !== undefined ? 'ring-2 ring-inset ring-emerald-500 bg-emerald-50/40' : ''
+                                className={`p-1 text-center border-r border-slate-200 ${
+                                  pendingItem !== undefined ? 'bg-amber-50' : ''
                                 }`}
                               >
-                                <span
-                                  className={`inline-flex items-center justify-center w-7 h-6 rounded-md text-[10px] font-extrabold ${
+                                <button
+                                  type="button"
+                                  onClick={() => handleCellClick(emp, day)}
+                                  title={tooltip}
+                                  aria-label={`${emp.nama}, tanggal ${day} ${MONTH_NAMES[bulan - 1]} ${tahun}, ${tooltip}`}
+                                  className={`inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-1 rounded-md text-[11px] font-mono font-extrabold border transition-all active:scale-95 ${
+                                    pendingItem !== undefined
+                                      ? 'ring-2 ring-amber-600 '
+                                      : ''
+                                  }${
                                     isRosterOverride
-                                      ? `${style.pill} shadow-2xs`
-                                      : 'bg-slate-100 text-slate-400 font-semibold'
+                                      ? `${style.pill}`
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 font-semibold'
                                   }`}
                                 >
                                   {code}
-                                </span>
+                                </button>
                               </td>
                             );
                           })}
@@ -1118,165 +1481,231 @@ const JamKerjaPage = () => {
           MODAL 1: CREATE / EDIT MASTER JAM KERJA
       ========================================================= */}
       {showShiftModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowShiftModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-shift-title"
+            className="surface-modal max-w-lg w-full overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="text-base font-extrabold">
+              <h3 id="modal-shift-title" className="text-base font-extrabold">
                 {editingShift ? 'Perbarui Profil Jam Kerja' : 'Buat Profil Jam Kerja Baru'}
               </h3>
-              <button onClick={() => setShowShiftModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={18} />
+              <button
+                type="button"
+                onClick={() => setShowShiftModal(false)}
+                aria-label="Tutup dialog profil jam kerja"
+                className="gov-icon-btn text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveShift} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSaveShift} className="p-6 space-y-4 text-xs sm:text-sm">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Nama Profil Shift</label>
+                <label htmlFor="shift-nama" className="block font-bold text-slate-800 mb-1.5">
+                  Nama Profil Shift <span className="text-red-700">*</span>
+                </label>
                 <input
+                  id="shift-nama"
                   type="text"
                   required
                   placeholder="Contoh: Shift Pagi RSUD / Reguler OPD"
                   value={shiftForm.nama_shift}
                   onChange={(e) => setShiftForm({ ...shiftForm, nama_shift: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-600"
+                  className="gov-input"
                 />
               </div>
 
               {userRole === 'super_admin' && (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Cakupan Instansi OPD</label>
+                  <label htmlFor="shift-opd" className="block font-bold text-slate-800 mb-1.5">
+                    Cakupan Instansi OPD
+                  </label>
                   <select
+                    id="shift-opd"
                     value={shiftForm.opd_id}
                     onChange={(e) => setShiftForm({ ...shiftForm, opd_id: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white"
+                    className="gov-select"
                   >
                     <option value="">Global (Berlaku untuk Seluruh OPD)</option>
                     {opdList.map((opd) => (
-                      <option key={opd.id} value={opd.id}>{opd.nama_opd}</option>
+                      <option key={opd.id} value={opd.id}>
+                        {opd.nama_opd || opd.nama}
+                      </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Jam Masuk Baku</label>
+                  <label htmlFor="shift-jam-masuk" className="block font-bold text-slate-800 mb-1.5">
+                    Jam Masuk Baku <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="shift-jam-masuk"
                     type="time"
                     required
                     value={shiftForm.jam_masuk}
                     onChange={(e) => setShiftForm({ ...shiftForm, jam_masuk: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Jam Pulang Baku</label>
+                  <label htmlFor="shift-jam-pulang" className="block font-bold text-slate-800 mb-1.5">
+                    Jam Pulang Baku <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="shift-jam-pulang"
                     type="time"
                     required
                     value={shiftForm.jam_pulang}
                     onChange={(e) => setShiftForm({ ...shiftForm, jam_pulang: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Mulai Scan Masuk</label>
+                  <label
+                    htmlFor="shift-mulai-masuk"
+                    className="block font-bold text-slate-800 mb-1.5"
+                  >
+                    Mulai Scan Masuk <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="shift-mulai-masuk"
                     type="time"
                     required
                     value={shiftForm.mulai_scan_masuk}
-                    onChange={(e) => setShiftForm({ ...shiftForm, mulai_scan_masuk: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    onChange={(e) =>
+                      setShiftForm({ ...shiftForm, mulai_scan_masuk: e.target.value })
+                    }
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Akhir Scan Masuk</label>
+                  <label
+                    htmlFor="shift-akhir-masuk"
+                    className="block font-bold text-slate-800 mb-1.5"
+                  >
+                    Akhir Scan Masuk <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="shift-akhir-masuk"
                     type="time"
                     required
                     value={shiftForm.akhir_scan_masuk}
-                    onChange={(e) => setShiftForm({ ...shiftForm, akhir_scan_masuk: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    onChange={(e) =>
+                      setShiftForm({ ...shiftForm, akhir_scan_masuk: e.target.value })
+                    }
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Mulai Scan Pulang</label>
+                  <label
+                    htmlFor="shift-mulai-pulang"
+                    className="block font-bold text-slate-800 mb-1.5"
+                  >
+                    Mulai Scan Pulang <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="shift-mulai-pulang"
                     type="time"
                     required
                     value={shiftForm.mulai_scan_pulang}
-                    onChange={(e) => setShiftForm({ ...shiftForm, mulai_scan_pulang: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    onChange={(e) =>
+                      setShiftForm({ ...shiftForm, mulai_scan_pulang: e.target.value })
+                    }
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Akhir Scan Pulang (Cut-Off)</label>
+                  <label
+                    htmlFor="shift-akhir-pulang"
+                    className="block font-bold text-slate-800 mb-1.5"
+                  >
+                    Akhir Scan Pulang (Batas Tutup) <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="shift-akhir-pulang"
                     type="time"
                     required
                     value={shiftForm.akhir_scan_pulang}
-                    onChange={(e) => setShiftForm({ ...shiftForm, akhir_scan_pulang: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    onChange={(e) =>
+                      setShiftForm({ ...shiftForm, akhir_scan_pulang: e.target.value })
+                    }
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Toleransi Keterlambatan (Menit)</label>
+                <label htmlFor="shift-toleransi" className="block font-bold text-slate-800 mb-1.5">
+                  Toleransi Keterlambatan (Menit)
+                </label>
                 <input
+                  id="shift-toleransi"
                   type="number"
                   min={0}
                   max={180}
                   value={shiftForm.menit_toleransi}
-                  onChange={(e) => setShiftForm({ ...shiftForm, menit_toleransi: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300"
+                  onChange={(e) =>
+                    setShiftForm({ ...shiftForm, menit_toleransi: Number(e.target.value) })
+                  }
+                  className="gov-input font-mono tabular-nums"
                 />
               </div>
 
-              <div className="space-y-2 pt-1">
-                <label className="flex items-center gap-2.5 cursor-pointer">
+              <div className="space-y-2.5 pt-1">
+                <label className="flex items-start gap-3 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50">
                   <input
                     type="checkbox"
                     checked={shiftForm.is_lintas_hari}
-                    onChange={(e) => setShiftForm({ ...shiftForm, is_lintas_hari: e.target.checked })}
-                    className="rounded text-blue-600"
+                    onChange={(e) =>
+                      setShiftForm({ ...shiftForm, is_lintas_hari: e.target.checked })
+                    }
+                    className="mt-0.5 w-4 h-4 rounded accent-blue-700 shrink-0"
                   />
-                  <span className="font-bold text-slate-800">
-                    Shift Lintas Hari / Malam (Jam pulang berada di pagi hari berikutnya)
+                  <span className="font-semibold text-slate-800 text-xs leading-relaxed">
+                    Shift Lintas Hari / Malam (jam kepulangan berada pada pagi hari berikutnya)
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2.5 cursor-pointer">
+                <label className="flex items-start gap-3 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50">
                   <input
                     type="checkbox"
                     checked={shiftForm.abaikan_libur}
-                    onChange={(e) => setShiftForm({ ...shiftForm, abaikan_libur: e.target.checked })}
-                    className="rounded text-blue-600"
+                    onChange={(e) =>
+                      setShiftForm({ ...shiftForm, abaikan_libur: e.target.checked })
+                    }
+                    className="mt-0.5 w-4 h-4 rounded accent-blue-700 shrink-0"
                   />
-                  <span className="font-bold text-slate-800">
-                    Abaikan Hari Libur (Tetap beroperasi pada Sabtu/Minggu & Libur Nasional)
+                  <span className="font-semibold text-slate-800 text-xs leading-relaxed">
+                    Abaikan Hari Libur (tetap beroperasi pada hari Sabtu, Minggu, dan Libur Nasional)
                   </span>
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setShowShiftModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 cursor-pointer"
+                  className="gov-btn-secondary"
                 >
                   Batal
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-600/20 cursor-pointer"
-                >
+                <button type="submit" className="gov-btn-primary">
                   Simpan Profil Shift
                 </button>
               </div>
@@ -1289,25 +1718,44 @@ const JamKerjaPage = () => {
           MODAL 2: PLOTTING RENTANG TANGGAL
       ========================================================= */}
       {showRangeModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowRangeModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-range-title"
+            className="surface-modal max-w-lg w-full overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="text-base font-extrabold">Plotting Roster Rentang Tanggal</h3>
-              <button onClick={() => setShowRangeModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={18} />
+              <h3 id="modal-range-title" className="text-base font-extrabold">
+                Plotting Roster Rentang Tanggal
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowRangeModal(false)}
+                aria-label="Tutup dialog plotting rentang tanggal"
+                className="gov-icon-btn text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitRangeRoster} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSubmitRangeRoster} className="p-6 space-y-4 text-xs sm:text-sm">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
+                <p className="font-bold text-slate-800 mb-1.5">
                   Pilih Pegawai ({rangeForm.user_ids.length} dipilih)
-                </label>
-                <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
+                </p>
+                <div className="max-h-48 overflow-y-auto border border-slate-400 rounded-lg p-2 space-y-1 bg-slate-50">
                   {filteredEmployees.map((emp) => {
                     const checked = rangeForm.user_ids.includes(emp.user_id);
                     return (
-                      <label key={emp.user_id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                      <label
+                        key={emp.user_id}
+                        className="flex items-center gap-2.5 min-h-[44px] px-2.5 py-1.5 rounded-md bg-white hover:bg-blue-50 border border-slate-200"
+                      >
                         <input
                           type="checkbox"
                           checked={checked}
@@ -1319,50 +1767,63 @@ const JamKerjaPage = () => {
                                 : [...prev.user_ids, emp.user_id],
                             }));
                           }}
+                          className="w-4 h-4 rounded accent-blue-700 shrink-0"
                         />
-                        <span className="font-bold text-slate-800">{emp.nama}</span>
-                        <span className="text-slate-400 font-mono text-[10px]">({emp.nip})</span>
+                        <span className="font-bold text-slate-900 text-xs">{emp.nama}</span>
+                        <span className="text-slate-600 font-mono text-[11px] tabular-nums">
+                          ({emp.nip})
+                        </span>
                       </label>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Dari Tanggal</label>
+                  <label htmlFor="range-start" className="block font-bold text-slate-800 mb-1.5">
+                    Dari Tanggal <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="range-start"
                     type="date"
                     required
                     value={rangeForm.start_date}
                     onChange={(e) => setRangeForm({ ...rangeForm, start_date: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Sampai Tanggal</label>
+                  <label htmlFor="range-end" className="block font-bold text-slate-800 mb-1.5">
+                    Sampai Tanggal <span className="text-red-700">*</span>
+                  </label>
                   <input
+                    id="range-end"
                     type="date"
                     required
                     value={rangeForm.end_date}
                     onChange={(e) => setRangeForm({ ...rangeForm, end_date: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                    className="gov-input font-mono tabular-nums"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Shift yang Diterapkan</label>
+                <label htmlFor="range-shift" className="block font-bold text-slate-800 mb-1.5">
+                  Shift yang Diterapkan <span className="text-red-700">*</span>
+                </label>
                 <select
+                  id="range-shift"
                   required
                   value={rangeForm.jam_kerja_id}
                   onChange={(e) => setRangeForm({ ...rangeForm, jam_kerja_id: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white"
+                  className="gov-select"
                 >
-                  <option value="">-- Pilih Shift --</option>
+                  <option value="">Pilih Profil Shift</option>
                   {shifts.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.nama_shift} ({s.jam_masuk_str || s.jam_masuk}-{s.jam_pulang_str || s.jam_pulang})
+                      {s.nama_shift} ({s.jam_masuk_str || s.jam_masuk} s.d.{' '}
+                      {s.jam_pulang_str || s.jam_pulang})
                     </option>
                   ))}
                   <option value="0">Reset / Hapus Roster (Kembali ke Default Pegawai)</option>
@@ -1370,28 +1831,28 @@ const JamKerjaPage = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Keterangan (Opsional)</label>
+                <label htmlFor="range-ket" className="block font-bold text-slate-800 mb-1.5">
+                  Keterangan (Opsional)
+                </label>
                 <input
+                  id="range-ket"
                   type="text"
                   placeholder="Contoh: Jadwal Jaga Minggu Ke-1"
                   value={rangeForm.keterangan}
                   onChange={(e) => setRangeForm({ ...rangeForm, keterangan: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300"
+                  className="gov-input"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setShowRangeModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold cursor-pointer"
+                  className="gov-btn-secondary"
                 >
                   Batal
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
-                >
+                <button type="submit" className="gov-btn-primary">
                   Simpan Plotting
                 </button>
               </div>
@@ -1404,39 +1865,61 @@ const JamKerjaPage = () => {
           MODAL 3: TUKAR JAGA PEGAWAI (SWAP SHIFT)
       ========================================================= */}
       {showSwapModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-6 py-4 bg-amber-500 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ArrowLeftRight size={18} />
-                <h3 className="text-base font-extrabold">Tukar Jaga Shift Pegawai</h3>
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowSwapModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-swap-title"
+            className="surface-modal max-w-md w-full overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <ArrowLeftRight size={18} aria-hidden="true" />
+                <h3 id="modal-swap-title" className="text-base font-extrabold">
+                  Tukar Jaga Shift Pegawai
+                </h3>
               </div>
-              <button onClick={() => setShowSwapModal(false)} className="text-white/80 hover:text-white cursor-pointer">
-                <X size={18} />
+              <button
+                type="button"
+                onClick={() => setShowSwapModal(false)}
+                aria-label="Tutup dialog tukar jaga"
+                className="gov-icon-btn text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitSwapRoster} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSubmitSwapRoster} className="p-6 space-y-4 text-xs sm:text-sm">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Tanggal Tukar Jaga</label>
+                <label htmlFor="swap-tanggal" className="block font-bold text-slate-800 mb-1.5">
+                  Tanggal Tukar Jaga <span className="text-red-700">*</span>
+                </label>
                 <input
+                  id="swap-tanggal"
                   type="date"
                   required
                   value={swapForm.tanggal}
                   onChange={(e) => setSwapForm({ ...swapForm, tanggal: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300"
+                  className="gov-input font-mono tabular-nums"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Pegawai Pertama (Pihak A)</label>
+                <label htmlFor="swap-user-a" className="block font-bold text-slate-800 mb-1.5">
+                  Pegawai Pertama (Pihak A) <span className="text-red-700">*</span>
+                </label>
                 <select
+                  id="swap-user-a"
                   required
                   value={swapForm.user_a_id}
                   onChange={(e) => setSwapForm({ ...swapForm, user_a_id: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white"
+                  className="gov-select"
                 >
-                  <option value="">-- Pilih Pegawai A --</option>
+                  <option value="">Pilih Pegawai Pihak A</option>
                   {employees.map((emp) => (
                     <option key={emp.user_id} value={emp.user_id}>
                       {emp.nama} ({emp.default_nama_shift})
@@ -1446,14 +1929,17 @@ const JamKerjaPage = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Ditukar Dengan Pegawai Kedua (Pihak B)</label>
+                <label htmlFor="swap-user-b" className="block font-bold text-slate-800 mb-1.5">
+                  Ditukar dengan Pegawai Kedua (Pihak B) <span className="text-red-700">*</span>
+                </label>
                 <select
+                  id="swap-user-b"
                   required
                   value={swapForm.user_b_id}
                   onChange={(e) => setSwapForm({ ...swapForm, user_b_id: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white"
+                  className="gov-select"
                 >
-                  <option value="">-- Pilih Pegawai B --</option>
+                  <option value="">Pilih Pegawai Pihak B</option>
                   {employees.map((emp) => (
                     <option key={emp.user_id} value={emp.user_id}>
                       {emp.nama} ({emp.default_nama_shift})
@@ -1463,28 +1949,28 @@ const JamKerjaPage = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Alasan / Catatan Tukar Jaga</label>
+                <label htmlFor="swap-keterangan" className="block font-bold text-slate-800 mb-1.5">
+                  Alasan / Catatan Tukar Jaga
+                </label>
                 <input
+                  id="swap-keterangan"
                   type="text"
                   placeholder="Contoh: Tukar shift atas izin Kepala Ruangan"
                   value={swapForm.keterangan}
                   onChange={(e) => setSwapForm({ ...swapForm, keterangan: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300"
+                  className="gov-input"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setShowSwapModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold cursor-pointer"
+                  className="gov-btn-secondary"
                 >
                   Batal
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold cursor-pointer"
-                >
+                <button type="submit" className="gov-btn-primary">
                   Proses Tukar Jaga
                 </button>
               </div>

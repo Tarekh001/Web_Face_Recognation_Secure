@@ -2,10 +2,23 @@ import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import API_BASE from '../config/api';
 import {
-  ClipboardList, Search, FileSpreadsheet, ChevronLeft, ChevronRight,
-  CalendarDays, RotateCcw, MapPin, Users, Building2
+  ClipboardList,
+  Search,
+  FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  RotateCcw,
+  MapPin,
+  Users,
+  Building2,
 } from 'lucide-react';
 import { getInitials } from '../components/AttendancePhotoModal';
+import {
+  TableLoadingRow,
+  TableErrorRow,
+  notifyAlert,
+} from '../components/UiFeedback';
 
 const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
@@ -15,6 +28,7 @@ const LaporanKegiatan = () => {
   const [data, setData] = useState([]);
   const [kegiatanList, setKegiatanList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 
   const [selectedKegiatan, setSelectedKegiatan] = useState('');
@@ -43,6 +57,7 @@ const LaporanKegiatan = () => {
 
   const fetchReport = useCallback(async () => {
     setIsLoading(true);
+    setErrorMsg('');
     try {
       const params = new URLSearchParams({ page, per_page: perPage });
       if (selectedKegiatan) params.set('kegiatan_id', selectedKegiatan);
@@ -54,6 +69,9 @@ const LaporanKegiatan = () => {
       setTotalRecords(res.data.total_records || 0);
     } catch (err) {
       console.error('Gagal mengambil laporan kegiatan:', err);
+      setErrorMsg(
+        err.response?.data?.error || 'Tidak dapat memuat laporan kehadiran kegiatan dari server.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -70,9 +88,14 @@ const LaporanKegiatan = () => {
     setPage(1);
   };
 
-  // Export ALL matching records (not just current page)
   const handleExport = async () => {
-    if (totalRecords === 0) return alert('Tidak ada data untuk di-export');
+    if (totalRecords === 0) {
+      return notifyAlert({
+        icon: 'info',
+        title: 'Data Kosong',
+        text: 'Belum ada data kehadiran kegiatan untuk diekspor.',
+      });
+    }
     setIsExporting(true);
     try {
       const params = new URLSearchParams({ page: 1, per_page: 99999 });
@@ -81,9 +104,23 @@ const LaporanKegiatan = () => {
 
       const res = await axios.get(`${API_BASE}/report/kegiatan?${params}`, getAuthHeaders());
       const allRows = res.data?.data || [];
-      if (allRows.length === 0) return alert('Tidak ada data untuk di-export');
+      if (allRows.length === 0) {
+        return notifyAlert({
+          icon: 'info',
+          title: 'Data Kosong',
+          text: 'Tidak ada baris data yang cocok untuk diekspor.',
+        });
+      }
 
-      const headers = ['No', 'NIP', 'Nama Pegawai', 'Instansi OPD', 'Nama Kegiatan', 'Waktu Scan', 'Mesin / Device'];
+      const headers = [
+        'No',
+        'NIP',
+        'Nama Pegawai',
+        'Instansi OPD',
+        'Nama Kegiatan',
+        'Waktu Scan',
+        'Mesin / Perangkat',
+      ];
       const rows = allRows.map((r, i) => [
         i + 1,
         r.nip,
@@ -104,92 +141,111 @@ const LaporanKegiatan = () => {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Gagal export CSV: ' + (err.response?.data?.error || err.message));
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Mengekspor CSV',
+        text: err.response?.data?.error || err.message,
+      });
     } finally {
       setIsExporting(false);
     }
   };
 
-  const selectedKegiatanObj = kegiatanList.find((k) => String(k.id) === String(selectedKegiatan));
+  const selectedKegiatanObj = kegiatanList.find(
+    (k) => String(k.id) === String(selectedKegiatan)
+  );
   const hasActiveFilters = Boolean(selectedKegiatan || search);
 
   return (
     <div className="space-y-5">
-      {/* ── BENTO SUMMARY CARDS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+      {/* Ringkasan Berhierarki (Focal Metric + Konteks Aktif + Total Jadwal) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-5 surface-card p-5 border-l-4 border-l-blue-700 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-800">
               Total Kehadiran Kegiatan
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-              <Users size={16} />
+            <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
+              <Users size={17} aria-hidden="true" />
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            <span className="text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
               {totalRecords.toLocaleString('id-ID')}
             </span>
-            <p className="text-xs text-slate-500 mt-1">Total seluruh log scan kegiatan sesuai filter</p>
+            <p className="text-xs text-slate-600 mt-1">
+              Jumlah rekaman presensi wajah pada kegiatan sesuai filter aktif
+            </p>
           </div>
         </div>
 
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
-              Jadwal Kegiatan Terdaftar
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <CalendarDays size={16} />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-extrabold text-indigo-700 tracking-tight">
-              {kegiatanList.length.toLocaleString('id-ID')}
-            </span>
-            <p className="text-xs text-slate-500 mt-1">Kegiatan global & internal instansi</p>
-          </div>
-        </div>
-
-        <div className="glass-card p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+        <div className="lg:col-span-4 surface-card p-5 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
               Cakupan Kegiatan Aktif
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-              <ClipboardList size={16} />
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+              <ClipboardList size={17} aria-hidden="true" />
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-base font-extrabold text-slate-900 truncate" title={selectedKegiatanObj?.nama_kegiatan || 'Semua Kegiatan'}>
+            <p
+              className="text-base font-extrabold text-slate-900 truncate"
+              title={selectedKegiatanObj?.nama_kegiatan || 'Semua Kegiatan'}
+            >
               {selectedKegiatanObj ? selectedKegiatanObj.nama_kegiatan : 'Semua Kegiatan'}
             </p>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-600 mt-1">
               {selectedKegiatanObj
-                ? `Tanggal: ${selectedKegiatanObj.tanggal_mulai}`
-                : 'Menampilkan seluruh riwayat kegiatan'}
+                ? `Tanggal pelaksanaan: ${selectedKegiatanObj.tanggal_mulai}`
+                : 'Menampilkan seluruh riwayat kegiatan dinas luar'}
             </p>
+          </div>
+        </div>
+
+        <div className="lg:col-span-3 surface-card p-5 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Agenda Terdaftar
+            </span>
+            <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 shrink-0">
+              <CalendarDays size={17} aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+              {kegiatanList.length.toLocaleString('id-ID')}
+            </span>
+            <p className="text-xs text-slate-600 mt-1">Kegiatan lintas OPD dan internal</p>
           </div>
         </div>
       </div>
 
-      {/* ── FILTER & ACTION TOOLBAR ── */}
-      <div className="glass-panel p-5">
+      {/* Bilah Filter dan Ekspor */}
+      <div className="surface-card p-5">
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 flex-1">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label
+                htmlFor="laporan-kegiatan-select"
+                className="block text-xs font-bold text-slate-800 mb-1.5"
+              >
                 Pilih Kegiatan
               </label>
               <div className="relative">
-                <CalendarDays className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
+                <CalendarDays
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                  size={15}
+                  aria-hidden="true"
+                />
                 <select
+                  id="laporan-kegiatan-select"
                   value={selectedKegiatan}
                   onChange={(e) => {
                     setSelectedKegiatan(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full pl-9 pr-8 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none appearance-none cursor-pointer transition-all shadow-soft-xs"
+                  className="gov-select pl-9"
                 >
                   <option value="">Semua Kegiatan</option>
                   {kegiatanList.map((k) => (
@@ -198,35 +254,38 @@ const LaporanKegiatan = () => {
                     </option>
                   ))}
                 </select>
-                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={15} />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label
+                htmlFor="laporan-kegiatan-search"
+                className="block text-xs font-bold text-slate-800 mb-1.5"
+              >
                 Cari Pegawai
               </label>
               <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                <Search
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                  size={15}
+                  aria-hidden="true"
+                />
                 <input
+                  id="laporan-kegiatan-search"
                   type="text"
-                  placeholder="Cari NIP atau Nama Pegawai..."
+                  placeholder="Cari NIP atau nama pegawai..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs"
+                  className="gov-input pl-9"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 rounded-xl transition-all cursor-pointer"
-              >
-                <RotateCcw size={14} />
+              <button type="button" onClick={handleResetFilters} className="gov-btn-secondary">
+                <RotateCcw size={15} aria-hidden="true" />
                 <span>Reset Filter</span>
               </button>
             )}
@@ -234,89 +293,92 @@ const LaporanKegiatan = () => {
               type="button"
               onClick={handleExport}
               disabled={totalRecords === 0 || isExporting}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="gov-btn-primary"
             >
-              <FileSpreadsheet size={16} />
-              <span>{isExporting ? 'Mengekspor...' : 'Export CSV'}</span>
+              <FileSpreadsheet size={16} aria-hidden="true" />
+              <span>{isExporting ? 'Mengekspor...' : 'Ekspor CSV'}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── DATA TABLE ── */}
-      <div className="glass-card overflow-hidden">
+      {/* Tabel Data Kehadiran Kegiatan */}
+      <div className="surface-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="gov-table">
             <thead>
-              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-                <th className="px-4 py-3.5 w-12 text-center">#</th>
-                <th className="px-4 py-3.5">Pegawai</th>
-                <th className="px-4 py-3.5">Instansi OPD</th>
-                <th className="px-4 py-3.5">Nama Kegiatan</th>
-                <th className="px-4 py-3.5">Waktu Scan</th>
-                <th className="px-4 py-3.5 text-center">Perangkat / Kiosk</th>
+              <tr>
+                <th scope="col" className="w-14 text-center">No</th>
+                <th scope="col">Pegawai</th>
+                <th scope="col">Instansi OPD</th>
+                <th scope="col">Nama Kegiatan</th>
+                <th scope="col">Waktu Scan</th>
+                <th scope="col" className="text-center">Perangkat / Kiosk</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+            <tbody>
               {isLoading ? (
-                <tr>
-                  <td colSpan="6" className="text-center py-20">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-9 h-9 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-                      <span className="text-slate-400 text-sm font-medium">Memuat data kegiatan...</span>
-                    </div>
-                  </td>
-                </tr>
+                <TableLoadingRow colSpan={6} label="Memuat data kehadiran kegiatan..." />
+              ) : errorMsg ? (
+                <TableErrorRow colSpan={6} message={errorMsg} onRetry={fetchReport} />
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-20">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
-                        <ClipboardList size={22} />
+                  <td colSpan={6} className="text-center py-16 px-4">
+                    <div className="flex flex-col items-center gap-2 max-w-sm mx-auto">
+                      <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-600 mb-1">
+                        <ClipboardList size={22} aria-hidden="true" />
                       </div>
-                      <p className="text-slate-700 font-bold text-base">Belum ada data kehadiran kegiatan</p>
-                      <p className="text-slate-400 text-xs max-w-sm">
-                        Data akan muncul secara otomatis ketika pegawai melakukan scan wajah pada kegiatan aktif.
+                      <p className="text-slate-900 font-bold text-sm sm:text-base">
+                        Belum Ada Data Kehadiran Kegiatan
+                      </p>
+                      <p className="text-slate-600 text-xs leading-relaxed">
+                        {hasActiveFilters
+                          ? 'Tidak ditemukan rekaman kehadiran yang cocok dengan filter kegiatan atau pencarian pegawai.'
+                          : 'Data kehadiran akan tercatat secara otomatis ketika pegawai memindai wajah pada kegiatan aktif.'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 data.map((row, idx) => (
-                  <tr key={row.id || idx} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-4 py-3.5 text-center text-xs font-mono text-slate-400">
+                  <tr key={row.id || idx}>
+                    <td className="text-center text-xs font-mono text-slate-600 tabular-nums">
                       {(page - 1) * perPage + idx + 1}
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-xs font-extrabold flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-extrabold flex items-center justify-center shrink-0">
                           {getInitials(row.nama_lengkap)}
                         </div>
                         <div>
-                          <span className="font-bold text-slate-900 block leading-snug">{row.nama_lengkap}</span>
-                          <span className="font-mono text-xs text-slate-500">{row.nip}</span>
+                          <span className="font-bold text-slate-900 block leading-snug">
+                            {row.nama_lengkap}
+                          </span>
+                          <span className="font-mono text-xs text-slate-600 tabular-nums">
+                            {row.nip}
+                          </span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-xs font-semibold text-slate-600">
+                    <td className="px-4 py-3.5 text-xs font-semibold text-slate-700">
                       <span className="inline-flex items-center gap-1.5">
-                        <Building2 size={13} className="text-slate-400 shrink-0" />
-                        <span>{row.opd || '—'}</span>
+                        <Building2 size={13} className="text-slate-600 shrink-0" aria-hidden="true" />
+                        <span>{row.opd || '-'}</span>
                       </span>
                     </td>
                     <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
-                        <CalendarDays size={12} />
-                        {row.nama_kegiatan}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-800 border border-blue-300">
+                        <CalendarDays size={12} aria-hidden="true" />
+                        <span>{row.nama_kegiatan}</span>
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-mono text-xs font-semibold text-slate-700">
+                    <td className="px-4 py-3.5 whitespace-nowrap font-mono text-xs font-semibold text-slate-800 tabular-nums">
                       {row.waktu_scan}
                     </td>
                     <td className="px-4 py-3.5 text-center">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-mono font-semibold bg-slate-100 text-slate-600 border border-slate-200/70">
-                        <MapPin size={11} className="text-slate-400" />
-                        {row.device_sn || '—'}
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-slate-100 text-slate-800 border border-slate-300">
+                        <MapPin size={11} className="text-slate-600" aria-hidden="true" />
+                        <span>{row.device_sn || '-'}</span>
                       </span>
                     </td>
                   </tr>
@@ -326,29 +388,32 @@ const LaporanKegiatan = () => {
           </table>
         </div>
 
-        {/* ── PAGINATION BAR ── */}
-        <div className="p-4 sm:px-6 border-t border-slate-200/80 bg-slate-50/60 flex flex-wrap justify-between items-center gap-4">
+        {/* Bilah Paginasi */}
+        <div className="p-4 sm:px-6 border-t border-slate-200 bg-slate-50 flex flex-wrap justify-between items-center gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-slate-700 font-medium tabular-nums">
               Menampilkan baris{' '}
-              <span className="font-bold text-slate-800">
+              <span className="font-bold text-slate-900">
                 {data.length > 0 ? (page - 1) * perPage + 1 : 0}
-              </span>
-              –
-              <span className="font-bold text-slate-800">
+              </span>{' '}
+              s.d.{' '}
+              <span className="font-bold text-slate-900">
                 {Math.min(page * perPage, totalRecords)}
               </span>{' '}
-              dari <span className="font-bold text-slate-800">{totalRecords}</span> record kehadiran
+              dari <span className="font-bold text-slate-900">{totalRecords}</span> data kehadiran
             </p>
-            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-              <label className="text-xs text-slate-400 font-medium">Baris per halaman:</label>
+            <div className="flex items-center gap-2 pl-3 border-l border-slate-300">
+              <label htmlFor="laporan-kegiatan-perpage" className="text-xs text-slate-700 font-semibold">
+                Baris per halaman:
+              </label>
               <select
+                id="laporan-kegiatan-perpage"
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2 py-1 text-xs font-semibold border border-slate-200 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none cursor-pointer"
+                className="min-h-[44px] px-3 py-1.5 text-xs font-bold border border-slate-500 rounded-lg bg-white text-slate-900 tabular-nums"
               >
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -358,27 +423,27 @@ const LaporanKegiatan = () => {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-soft-xs"
+                className="gov-btn-secondary text-xs"
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={15} aria-hidden="true" />
                 <span>Sebelumnya</span>
               </button>
-              <span className="px-3 py-1.5 text-xs font-bold text-slate-700">
-                Hal {page} / {totalPages}
+              <span className="px-3 py-2 text-xs font-bold text-slate-800 tabular-nums">
+                Hal. {page} / {totalPages}
               </span>
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-soft-xs"
+                className="gov-btn-secondary text-xs"
               >
                 <span>Berikutnya</span>
-                <ChevronRight size={14} />
+                <ChevronRight size={15} aria-hidden="true" />
               </button>
             </div>
           )}

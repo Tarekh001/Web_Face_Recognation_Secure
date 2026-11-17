@@ -1,33 +1,72 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import API_BASE from '../config/api';
-import { 
-  Settings, Clock, CalendarOff, Save, Plus, Trash2, X, 
-  AlertTriangle, Calendar, Info, CheckCircle2, PlayCircle, StopCircle
+import {
+  Settings,
+  Clock,
+  CalendarOff,
+  Save,
+  Plus,
+  Trash2,
+  X,
+  AlertTriangle,
+  Calendar,
+  Info,
+  CheckCircle2,
+  PlayCircle,
+  StopCircle,
+  Loader2,
+  Search,
 } from 'lucide-react';
+import {
+  useModalEscape,
+  ErrorBanner,
+  TableLoadingRow,
+  TableErrorRow,
+  TablePaginationBar,
+  notifyAlert,
+  confirmAction,
+} from '../components/UiFeedback';
 
 const API = API_BASE;
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState('jam_kerja');
-  const token = localStorage.getItem('access_token');
-  const headers = { Authorization: `Bearer ${token}` };
 
-  // ── JAM KERJA STATE ──
-  const [settings, setSettings] = useState({});
+  // JAM KERJA STATE
+  const [settings, setSettings] = useState({
+    JAM_MASUK_MULAI: '06:00:00',
+    BATAS_TERLAMBAT: '08:00:00',
+    JAM_MASUK_AKHIR: '12:00:00',
+    JAM_KELUAR_MULAI: '15:00:00',
+    JAM_KELUAR_AKHIR: '20:00:00',
+  });
+  const [isFetchingSettings, setIsFetchingSettings] = useState(true);
+  const [settingsError, setSettingsError] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // ── HARI LIBUR STATE ──
+  // HARI LIBUR STATE
   const [holidays, setHolidays] = useState([]);
+  const [isFetchingHolidays, setIsFetchingHolidays] = useState(true);
+  const [holidaysError, setHolidaysError] = useState('');
+  const [holidaySearch, setHolidaySearch] = useState('');
+  const [holidayPage, setHolidayPage] = useState(1);
+  const [holidayPerPage, setHolidayPerPage] = useState(10);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newHoliday, setNewHoliday] = useState({ tanggal: '', keterangan: '' });
   const [isAddingHoliday, setIsAddingHoliday] = useState(false);
 
-  // ── FETCH ──
-  const fetchSettings = async () => {
+  useModalEscape(showAddModal, () => setShowAddModal(false));
+
+  const fetchSettings = useCallback(async () => {
+    setIsFetchingSettings(true);
+    setSettingsError('');
+    const token = localStorage.getItem('access_token');
     try {
-      const res = await axios.get(`${API}/settings`, { headers });
+      const res = await axios.get(`${API}/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const map = {
         JAM_MASUK_MULAI: '06:00:00',
         BATAS_TERLAMBAT: '08:00:00',
@@ -37,12 +76,12 @@ const SettingsPage = () => {
       };
 
       if (Array.isArray(res.data)) {
-        res.data.forEach(s => {
+        res.data.forEach((s) => {
           if (s && s.key) map[s.key] = s.value;
         });
       } else if (res.data && typeof res.data === 'object') {
         Object.entries(res.data).forEach(([k, v]) => {
-          map[k] = (typeof v === 'object' && v !== null && 'value' in v) ? v.value : v;
+          map[k] = typeof v === 'object' && v !== null && 'value' in v ? v.value : v;
         });
       }
 
@@ -50,83 +89,157 @@ const SettingsPage = () => {
       setSettingsLoaded(true);
     } catch (err) {
       console.error('Gagal mengambil pengaturan', err);
-      // Fallback ke default values jika API gagal
-      setSettings({
-        JAM_MASUK_MULAI: '06:00:00',
-        BATAS_TERLAMBAT: '08:00:00',
-        JAM_MASUK_AKHIR: '12:00:00',
-        JAM_KELUAR_MULAI: '15:00:00',
-        JAM_KELUAR_AKHIR: '20:00:00',
-      });
+      setSettingsError(
+        err.response?.data?.error ||
+          'Tidak dapat memuat parameter jam kerja dari server. Menampilkan nilai bawaan sementara.'
+      );
       setSettingsLoaded(true);
+    } finally {
+      setIsFetchingSettings(false);
     }
-  };
+  }, []);
 
-  const fetchHolidays = async () => {
+  const fetchHolidays = useCallback(async () => {
+    setIsFetchingHolidays(true);
+    setHolidaysError('');
+    const token = localStorage.getItem('access_token');
     try {
-      const res = await axios.get(`${API}/holidays`, { headers });
-      setHolidays(Array.isArray(res.data) ? res.data : (res.data?.data || []));
+      const res = await axios.get(`${API}/holidays`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHolidays(Array.isArray(res.data) ? res.data : res.data?.data || []);
     } catch (err) {
       console.error('Gagal mengambil data hari libur', err);
+      setHolidaysError(
+        err.response?.data?.error || 'Tidak dapat memuat daftar hari libur khusus dari server.'
+      );
+    } finally {
+      setIsFetchingHolidays(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchSettings();
     fetchHolidays();
-  }, []);
+  }, [fetchSettings, fetchHolidays]);
 
-  // ── SAVE SETTINGS ──
+  const filteredHolidays = useMemo(() => {
+    if (!holidaySearch.trim()) return holidays;
+    const q = holidaySearch.toLowerCase();
+    return holidays.filter(
+      (h) =>
+        (h.tanggal || '').toLowerCase().includes(q) ||
+        (h.keterangan || '').toLowerCase().includes(q)
+    );
+  }, [holidays, holidaySearch]);
+
+  const totalHolidayPages = Math.max(1, Math.ceil(filteredHolidays.length / holidayPerPage));
+  const safeHolidayPage = Math.min(holidayPage, totalHolidayPages);
+  const paginatedHolidays = useMemo(() => {
+    const start = (safeHolidayPage - 1) * holidayPerPage;
+    return filteredHolidays.slice(start, start + holidayPerPage);
+  }, [filteredHolidays, safeHolidayPage, holidayPerPage]);
+
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
+    const token = localStorage.getItem('access_token');
     try {
-      await axios.put(`${API}/settings`, settings, { headers, 'Content-Type': 'application/json' });
-      alert('Pengaturan jam kerja berhasil disimpan!');
+      await axios.put(`${API}/settings`, settings, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      notifyAlert({
+        icon: 'success',
+        title: 'Tersimpan',
+        text: 'Pengaturan jam kerja kiosk berhasil disimpan.',
+        timer: 1800,
+      });
       fetchSettings();
     } catch (err) {
-      alert('Gagal: ' + (err.response?.data?.error || 'Error'));
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menyimpan',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menyimpan pengaturan.',
+      });
     } finally {
       setIsSavingSettings(false);
     }
   };
 
-  // ── ADD HOLIDAY ──
   const handleAddHoliday = async (e) => {
     if (e) e.preventDefault();
     if (!newHoliday.tanggal || !newHoliday.keterangan.trim()) {
-      return alert('Tanggal dan keterangan wajib diisi.');
+      return notifyAlert({
+        icon: 'warning',
+        title: 'Peringatan',
+        text: 'Tanggal dan keterangan hari libur wajib diisi.',
+      });
     }
     setIsAddingHoliday(true);
+    const token = localStorage.getItem('access_token');
     try {
-      await axios.post(`${API}/holidays`, newHoliday, { headers });
-      alert('Hari libur berhasil ditambahkan!');
+      await axios.post(`${API}/holidays`, newHoliday, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      notifyAlert({
+        icon: 'success',
+        title: 'Berhasil',
+        text: 'Hari libur khusus berhasil ditambahkan.',
+        timer: 1800,
+      });
       setNewHoliday({ tanggal: '', keterangan: '' });
       setShowAddModal(false);
       fetchHolidays();
     } catch (err) {
-      alert('Gagal: ' + (err.response?.data?.error || 'Error'));
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menambahkan',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menyimpan hari libur.',
+      });
     } finally {
       setIsAddingHoliday(false);
     }
   };
 
-  // ── DELETE HOLIDAY ──
   const handleDeleteHoliday = async (id, ket) => {
-    if (!confirm(`Hapus hari libur "${ket}"?`)) return;
+    const ok = await confirmAction({
+      title: 'Hapus Hari Libur Khusus?',
+      text: `Tanggal libur "${ket}" akan dihapus dari kalender pengecualian kerja.`,
+      confirmText: 'Ya, Hapus',
+    });
+    if (!ok) return;
+    const token = localStorage.getItem('access_token');
     try {
-      await axios.delete(`${API}/holidays/${id}`, { headers });
-      setHolidays(prev => prev.filter(h => h.id !== id));
+      await axios.delete(`${API}/holidays/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHolidays((prev) => prev.filter((h) => h.id !== id));
+      notifyAlert({
+        icon: 'success',
+        title: 'Terhapus',
+        text: `Hari libur "${ket}" telah dihapus.`,
+        timer: 1500,
+      });
     } catch (err) {
-      alert('❌ Gagal: ' + (err.response?.data?.error || 'Error'));
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menghapus',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menghapus hari libur.',
+      });
     }
   };
 
-  const updateSetting = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
+  const updateSetting = (key, value) => setSettings((prev) => ({ ...prev, [key]: value }));
 
   const formatDate = (d) => {
     try {
       return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
       });
     } catch {
       return d;
@@ -134,332 +247,443 @@ const SettingsPage = () => {
   };
 
   const settingFields = [
-    { 
-      key: 'JAM_MASUK_MULAI',  
-      label: 'Jam Mulai Masuk',    
-      icon: <PlayCircle size={15} className="text-emerald-600" />, 
+    {
+      key: 'JAM_MASUK_MULAI',
+      label: 'Jam Mulai Masuk',
+      icon: <PlayCircle size={15} className="text-emerald-700" aria-hidden="true" />,
       badge: 'Sesi Masuk',
-      desc: 'Waktu paling awal kiosk mulai menerima pemindaian presensi kehadiran pagi.' 
+      desc: 'Waktu paling awal perangkat kiosk mulai menerima pemindaian presensi kehadiran pagi.',
     },
-    { 
-      key: 'BATAS_TERLAMBAT',  
-      label: 'Batas Tepat Waktu',  
-      icon: <Clock size={15} className="text-amber-600" />, 
+    {
+      key: 'BATAS_TERLAMBAT',
+      label: 'Batas Tepat Waktu',
+      icon: <Clock size={15} className="text-amber-800" aria-hidden="true" />,
       badge: 'Ambang Batas',
-      desc: 'Pemindaian setelah jam ini secara otomatis tercatat berstatus TERLAMBAT.' 
+      desc: 'Pemindaian setelah jam ini secara otomatis tercatat berstatus TERLAMBAT.',
     },
-    { 
-      key: 'JAM_MASUK_AKHIR',  
-      label: 'Jam Akhir Masuk',    
-      icon: <StopCircle size={15} className="text-rose-600" />, 
+    {
+      key: 'JAM_MASUK_AKHIR',
+      label: 'Jam Akhir Masuk',
+      icon: <StopCircle size={15} className="text-red-700" aria-hidden="true" />,
       badge: 'Sesi Masuk',
-      desc: 'Batas akhir scan sesi pagi. Lewat jam ini kiosk menolak scan kehadiran masuk.' 
+      desc: 'Batas akhir pemindaian sesi pagi. Lewat jam ini kiosk menolak presensi masuk reguler.',
     },
-    { 
-      key: 'JAM_KELUAR_MULAI', 
-      label: 'Jam Mulai Pulang',   
-      icon: <PlayCircle size={15} className="text-emerald-600" />, 
+    {
+      key: 'JAM_KELUAR_MULAI',
+      label: 'Jam Mulai Pulang',
+      icon: <PlayCircle size={15} className="text-emerald-700" aria-hidden="true" />,
       badge: 'Sesi Pulang',
-      desc: 'Waktu paling awal pegawai diizinkan melakukan presensi kepulangan kantor.' 
+      desc: 'Waktu paling awal pegawai diizinkan melakukan pemindaian presensi kepulangan kantor.',
     },
-    { 
-      key: 'JAM_KELUAR_AKHIR', 
-      label: 'Jam Akhir Pulang',   
-      icon: <StopCircle size={15} className="text-rose-600" />, 
+    {
+      key: 'JAM_KELUAR_AKHIR',
+      label: 'Jam Akhir Pulang',
+      icon: <StopCircle size={15} className="text-red-700" aria-hidden="true" />,
       badge: 'Sesi Pulang',
-      desc: 'Batas akhir sesi kepulangan malam. Setelah ini kiosk beralih ke mode standby.' 
+      desc: 'Batas akhir sesi kepulangan harian. Setelah jam ini perangkat beralih ke mode siaga.',
     },
   ];
 
   const tabs = [
-    { id: 'jam_kerja', label: 'Jam Kerja Kiosk', icon: <Clock size={16} />, count: null },
-    { id: 'hari_libur', label: 'Hari Libur Custom', icon: <CalendarOff size={16} />, count: holidays.length },
+    {
+      id: 'jam_kerja',
+      label: 'Jam Kerja Kiosk',
+      icon: <Clock size={16} aria-hidden="true" />,
+      count: null,
+    },
+    {
+      id: 'hari_libur',
+      label: 'Hari Libur Khusus',
+      icon: <CalendarOff size={16} aria-hidden="true" />,
+      count: holidays.length,
+    },
   ];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      
-      {/* ── BENTO HEADER & SEGMENTED CONTROL TABS ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-5">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600">
-              <Settings size={18} />
-            </div>
-            Pengaturan Parameter Sistem
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Konfigurasi jendela jam kerja presensi dan kalender libur dinamis
-          </p>
+    <div className="w-full space-y-5">
+      {/* Header Standar Konfigurasi */}
+      <div className="surface-card p-5 sm:px-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
+            <Settings size={20} aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+              Pengaturan Parameter Sistem
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Konfigurasi jendela jam kerja bawaan kiosk dan kalender hari libur khusus daerah
+            </p>
+          </div>
         </div>
 
-        {/* Pill-shaped Segmented Control */}
-        <div className="inline-flex p-1.5 rounded-2xl bg-slate-100/90 border border-slate-200/80 shadow-soft-xs">
-          {tabs.map(t => {
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
-                  isActive
-                    ? 'bg-white text-blue-700 shadow-soft-sm scale-[1.02]'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                {t.icon}
-                <span>{t.label}</span>
-                {t.count !== null && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                    isActive ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div
+            role="tablist"
+            aria-label="Kategori Pengaturan Sistem"
+            className="inline-flex flex-wrap gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-300"
+          >
+            {tabs.map((t) => {
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveTab(t.id)}
+                  className={`inline-flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg text-xs font-bold transition-all active:translate-y-px ${
+                    isActive
+                      ? 'bg-blue-700 text-white shadow-btn-primary'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {t.icon}
+                  <span>{t.label}</span>
+                  {t.count !== null && (
+                    <span
+                      className={`text-[11px] px-1.5 py-0.5 rounded font-mono font-bold tabular-nums ${
+                        isActive
+                          ? 'bg-blue-900 text-white'
+                          : 'bg-white text-slate-700 border border-slate-300'
+                      }`}
+                    >
+                      {t.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {activeTab === 'hari_libur' && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="gov-btn-primary"
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span>Tambah Hari Libur</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── TAB 1: PENGATURAN JAM KERJA ── */}
+      {/* TAB 1: JAM KERJA KIOSK */}
       {activeTab === 'jam_kerja' && (
-        <div className="glass-panel p-6 sm:p-8 space-y-6 transition-all duration-300 animate-fadeIn">
-          
-          {/* Info Banner */}
-          <div className="bg-amber-50/90 border border-amber-200/80 p-4 rounded-2xl flex items-start gap-3 shadow-soft-xs">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
-              <AlertTriangle size={18} />
-            </div>
+        <div className="surface-card p-5 sm:p-6 space-y-6">
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-800 shrink-0 mt-0.5" aria-hidden="true" />
             <div>
-              <p className="text-xs font-bold text-amber-900">Perhatian Sinkronisasi Kiosk</p>
-              <p className="text-xs text-amber-700/90 mt-0.5 leading-relaxed">
-                Perubahan jam kerja akan langsung dievaluasi pada <b>setiap scan wajah berikutnya</b>. Pastikan format waktu dalam standar 24 jam (<code className="font-mono bg-amber-100/80 px-1 py-0.5 rounded text-amber-900 font-bold">HH:MM:SS</code>).
+              <p className="text-xs sm:text-sm font-bold text-amber-950">
+                Perhatian Sinkronisasi Kiosk
+              </p>
+              <p className="text-xs text-amber-900 mt-0.5 leading-relaxed">
+                Perubahan parameter jam kerja bawaan akan langsung dievaluasi pada{' '}
+                <b>setiap pemindaian wajah berikutnya</b>. Pastikan format waktu sesuai standar 24 jam (
+                <code className="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-amber-950 font-bold border border-amber-300">
+                  HH:MM:SS
+                </code>
+                ).
               </p>
             </div>
           </div>
 
-          {/* 2-Column Input Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {settingFields.map(f => (
-              <div 
-                key={f.key} 
-                className="bg-white/80 border border-slate-200/80 rounded-2xl p-5 shadow-soft-xs hover:shadow-soft-sm transition-all duration-200 flex flex-col justify-between"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <span>{f.icon}</span>
-                    <span>{f.label}</span>
-                  </label>
-                  <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                    {f.badge}
-                  </span>
-                </div>
+          <ErrorBanner message={settingsError} onRetry={fetchSettings} />
 
-                <div className="my-2">
-                  <input 
-                    type="time" 
-                    step="1" 
-                    value={(settings[f.key] || '').substring(0, 8)}
-                    onChange={e => updateSetting(f.key, e.target.value + (e.target.value.length === 5 ? ':00' : ''))}
-                    className="w-full p-3 bg-slate-50/90 border border-slate-200 rounded-xl font-mono text-xl font-extrabold text-center text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs"
-                  />
-                </div>
-
-                <p className="text-[11px] text-slate-500 leading-normal mt-1 flex items-start gap-1">
-                  <Info size={13} className="text-slate-400 shrink-0 mt-0.5" />
-                  <span>{f.desc}</span>
-                </p>
+          {isFetchingSettings ? (
+            <div className="py-12 text-center" role="status" aria-live="polite">
+              <div className="inline-flex flex-col items-center gap-2.5">
+                <Loader2 size={26} className="animate-spin text-blue-700" aria-hidden="true" />
+                <span className="text-sm font-semibold text-slate-700">
+                  Memuat parameter jam kerja sistem...
+                </span>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {settingFields.map((f) => {
+                const inputId = `setting-${f.key}`;
+                return (
+                  <div
+                    key={f.key}
+                    className="surface-panel p-5 flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <label
+                        htmlFor={inputId}
+                        className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5"
+                      >
+                        {f.icon}
+                        <span>{f.label}</span>
+                      </label>
+                      <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-300">
+                        {f.badge}
+                      </span>
+                    </div>
 
-          {/* Footer Actions */}
-          <div className="pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-              <CheckCircle2 size={15} className="text-emerald-600" />
-              <span>Semua perubahan disimpan ke database server utama</span>
+                    <div className="my-2">
+                      <input
+                        id={inputId}
+                        type="time"
+                        step="1"
+                        value={(settings[f.key] || '').substring(0, 8)}
+                        onChange={(e) =>
+                          updateSetting(
+                            f.key,
+                            e.target.value + (e.target.value.length === 5 ? ':00' : '')
+                          )
+                        }
+                        className="w-full min-h-[48px] px-3.5 py-2.5 bg-white border border-slate-500 rounded-lg font-mono text-xl font-extrabold text-center text-slate-900 tabular-nums shadow-soft-xs hover:border-slate-700 focus:border-blue-700"
+                      />
+                    </div>
+
+                    <p className="text-xs text-slate-600 leading-relaxed mt-1 flex items-start gap-1.5">
+                      <Info size={14} className="text-slate-600 shrink-0 mt-0.5" aria-hidden="true" />
+                      <span>{f.desc}</span>
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-xs text-slate-700 font-medium">
+              <CheckCircle2 size={16} className="text-emerald-700 shrink-0" aria-hidden="true" />
+              <span>Seluruh perubahan disimpan langsung pada basis data server utama</span>
             </div>
 
-            <button 
-              onClick={handleSaveSettings} 
+            <button
+              type="button"
+              onClick={handleSaveSettings}
               disabled={isSavingSettings || !settingsLoaded}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-bold px-7 py-3 rounded-xl transition-all shadow-md shadow-blue-500/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto gov-btn-primary px-6"
             >
               {isSavingSettings ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                  <Loader2 size={16} className="animate-spin" aria-hidden="true" />
                   <span>Menyimpan Pengaturan...</span>
                 </>
               ) : (
                 <>
-                  <Save size={18} />
+                  <Save size={16} aria-hidden="true" />
                   <span>Simpan Perubahan</span>
                 </>
               )}
             </button>
           </div>
-
         </div>
       )}
 
-      {/* ── TAB 2: HARI LIBUR CUSTOM ── */}
+      {/* TAB 2: HARI LIBUR KHUSUS (Tabel Standar Konfigurasi) */}
       {activeTab === 'hari_libur' && (
-        <div className="glass-panel overflow-hidden transition-all duration-300 animate-fadeIn">
-          
-          {/* Header Bar */}
-          <div className="p-5 sm:px-6 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/60">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <CalendarOff size={18} className="text-red-500" />
-                Kalender Hari Libur Khusus
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Libur daerah, cuti bersama, dan hari non-kerja khusus di luar libur nasional
-              </p>
+        <div className="surface-card overflow-hidden">
+          <div className="gov-table-toolbar">
+            <div className="w-full sm:w-80">
+              <label htmlFor="holiday-search-input" className="sr-only">
+                Cari Tanggal atau Keterangan Hari Libur
+              </label>
+              <div className="relative">
+                <Search
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                  size={16}
+                  aria-hidden="true"
+                />
+                <input
+                  id="holiday-search-input"
+                  type="text"
+                  placeholder="Cari tanggal atau nama hari libur..."
+                  value={holidaySearch}
+                  onChange={(e) => {
+                    setHolidaySearch(e.target.value);
+                    setHolidayPage(1);
+                  }}
+                  className="gov-input pl-9"
+                />
+              </div>
             </div>
 
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-red-500/20 active:scale-[0.98]"
-            >
-              <Plus size={16} />
-              <span>Tambah Hari Libur</span>
-            </button>
+            <span className="text-xs font-semibold text-slate-700 tabular-nums">
+              Total <b className="text-slate-900">{filteredHolidays.length}</b> hari libur khusus
+            </span>
           </div>
 
-          {/* Table Container */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
+            <table className="gov-table min-w-[760px]">
               <thead>
-                <tr className="bg-slate-50/90 text-slate-500 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200/80">
-                  <th className="px-6 py-4 w-12 text-center">#</th>
-                  <th className="px-6 py-4">Tanggal Libur</th>
-                  <th className="px-6 py-4">Nama / Keterangan</th>
-                  <th className="px-6 py-4 text-center w-28">Aksi</th>
+                <tr>
+                  <th className="w-14 text-center">No</th>
+                  <th className="w-64">Tanggal Libur</th>
+                  <th>Nama / Keterangan Libur</th>
+                  <th className="w-32 text-center">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {holidays.map((h, i) => (
-                  <tr key={h.id} className="hover:bg-red-50/20 transition-colors">
-                    <td className="px-6 py-4 text-center text-xs font-mono text-slate-400">
-                      {i + 1}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
-                        {h.tanggal}
-                      </span>
-                      <p className="text-xs text-slate-500 mt-1 font-medium">
-                        {formatDate(h.tanggal)}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-slate-800">
-                      {h.keterangan}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button 
-                        onClick={() => handleDeleteHoliday(h.id, h.keterangan)}
-                        className="inline-flex items-center gap-1 p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-200" 
-                        title="Hapus Hari Libur"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {holidays.length === 0 && (
+              <tbody>
+                {isFetchingHolidays ? (
+                  <TableLoadingRow
+                    colSpan={4}
+                    label="Memuat daftar kalender hari libur khusus..."
+                  />
+                ) : holidaysError ? (
+                  <TableErrorRow
+                    colSpan={4}
+                    message={holidaysError}
+                    onRetry={fetchHolidays}
+                  />
+                ) : paginatedHolidays.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-16 text-center text-slate-400">
-                      <div className="flex flex-col items-center gap-2">
-                        <CalendarOff size={32} className="text-slate-300" />
-                        <p className="text-sm font-semibold text-slate-600">Belum ada hari libur custom</p>
-                        <p className="text-xs text-slate-400">Klik tombol "Tambah Hari Libur" di atas untuk menambahkan tanggal libur baru.</p>
+                    <td colSpan={4} className="py-16 px-4 text-center">
+                      <div className="flex flex-col items-center gap-2 max-w-md mx-auto">
+                        <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-600">
+                          <CalendarOff size={22} aria-hidden="true" />
+                        </div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {holidaySearch
+                            ? 'Hari Libur Tidak Ditemukan'
+                            : 'Belum Ada Hari Libur Khusus'}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          {holidaySearch
+                            ? `Tidak ada tanggal atau keterangan libur yang cocok dengan "${holidaySearch}".`
+                            : 'Klik tombol "Tambah Hari Libur" di atas untuk mendaftarkan tanggal cuti bersama atau libur daerah.'}
+                        </p>
                       </div>
                     </td>
                   </tr>
+                ) : (
+                  paginatedHolidays.map((h, i) => (
+                    <tr key={h.id}>
+                      <td className="text-center text-xs font-mono text-slate-600 tabular-nums">
+                        {(safeHolidayPage - 1) * holidayPerPage + i + 1}
+                      </td>
+                      <td>
+                        <div className="flex flex-col">
+                          <span className="inline-block w-fit font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-300 tabular-nums">
+                            {h.tanggal}
+                          </span>
+                          <span className="text-xs text-slate-600 mt-1 font-medium">
+                            {formatDate(h.tanggal)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="font-semibold text-slate-900">{h.keterangan}</td>
+                      <td className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHoliday(h.id, h.keterangan)}
+                          aria-label={`Hapus hari libur ${h.keterangan}`}
+                          title="Hapus Hari Libur"
+                          className="gov-icon-btn text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200"
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
 
+          <TablePaginationBar
+            currentPage={safeHolidayPage}
+            totalItems={filteredHolidays.length}
+            itemsPerPage={holidayPerPage}
+            onPageChange={setHolidayPage}
+            onItemsPerPageChange={(val) => {
+              setHolidayPerPage(val);
+              setHolidayPage(1);
+            }}
+            unitLabel="hari libur"
+          />
         </div>
       )}
 
-      {/* ── GLASSMORPHIC ADD HOLIDAY MODAL ── */}
+      {/* MODAL TAMBAH HARI LIBUR KHUSUS */}
       {showAddModal && (
-        <div 
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300"
+        <div
+          className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4"
           onClick={() => setShowAddModal(false)}
         >
-          <div 
-            className="glass-modal max-w-md w-full p-6 sm:p-7 border border-white/80 shadow-2xl relative"
-            onClick={e => e.stopPropagation()}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-add-holiday-title"
+            className="surface-modal max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200/80 mb-5">
+            <div className="px-6 py-4 bg-[#0B1120] text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
-                  <Calendar size={18} />
-                </div>
+                <Calendar size={18} aria-hidden="true" />
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900">Tambah Hari Libur Custom</h3>
-                  <p className="text-[11px] text-slate-500">Pengecualian hari kerja untuk kiosk</p>
+                  <h3 id="modal-add-holiday-title" className="text-base font-extrabold">
+                    Tambah Hari Libur Khusus
+                  </h3>
                 </div>
               </div>
-              <button 
-                onClick={() => setShowAddModal(false)} 
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all"
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                aria-label="Tutup dialog tambah hari libur"
+                className="gov-icon-btn text-slate-300 hover:text-white hover:bg-slate-800"
               >
-                <X size={18} />
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleAddHoliday} className="space-y-4">
+            <form onSubmit={handleAddHoliday} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
-                  Tanggal Libur <span className="text-red-500">*</span>
+                <label
+                  htmlFor="holiday-tanggal"
+                  className="block text-xs font-bold text-slate-800 mb-1.5"
+                >
+                  Tanggal Libur <span className="text-red-700">*</span>
                 </label>
-                <input 
-                  type="date" 
+                <input
+                  id="holiday-tanggal"
+                  type="date"
                   required
-                  value={newHoliday.tanggal} 
-                  onChange={e => setNewHoliday({ ...newHoliday, tanggal: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50/90 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs" 
+                  value={newHoliday.tanggal}
+                  onChange={(e) => setNewHoliday({ ...newHoliday, tanggal: e.target.value })}
+                  className="gov-input font-mono tabular-nums"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
-                  Keterangan / Nama Libur <span className="text-red-500">*</span>
+                <label
+                  htmlFor="holiday-keterangan"
+                  className="block text-xs font-bold text-slate-800 mb-1.5"
+                >
+                  Keterangan / Nama Hari Libur <span className="text-red-700">*</span>
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  id="holiday-keterangan"
+                  type="text"
                   required
-                  placeholder="Contoh: Cuti Bersama Idul Fitri" 
+                  placeholder="Contoh: Cuti Bersama Idul Fitri"
                   value={newHoliday.keterangan}
-                  onChange={e => setNewHoliday({ ...newHoliday, keterangan: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50/90 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-soft-xs" 
+                  onChange={(e) => setNewHoliday({ ...newHoliday, keterangan: e.target.value })}
+                  className="gov-input"
                 />
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-4 mt-6 border-t border-slate-200/80 flex items-center justify-end gap-3">
-                <button 
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all active:scale-[0.98]"
+                  className="gov-btn-secondary"
                 >
                   Batal
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isAddingHoliday}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-red-500/25 active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait"
+                  className="gov-btn-primary"
                 >
                   {isAddingHoliday ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                      <Loader2 size={15} className="animate-spin" aria-hidden="true" />
                       <span>Menyimpan...</span>
                     </>
                   ) : (
@@ -471,7 +695,6 @@ const SettingsPage = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };
