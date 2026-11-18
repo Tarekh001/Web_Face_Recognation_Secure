@@ -1,235 +1,581 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import { MonitorSmartphone, Wifi, WifiOff, CheckCircle, XCircle, Pencil, Trash2, X, Info, Unlink, Search, Shield, ShieldOff } from 'lucide-react';
-
-const API = 'http://127.0.0.1:5000/api';
+import API_BASE from '../config/api';
+import {
+  MonitorSmartphone,
+  CheckCircle,
+  XCircle,
+  Pencil,
+  Trash2,
+  X,
+  Info,
+  Unlink,
+  Search,
+  Shield,
+  ShieldOff,
+} from 'lucide-react';
+import {
+  useModalEscape,
+  TableLoadingRow,
+  TableErrorRow,
+  TablePaginationBar,
+  notifyAlert,
+  confirmAction,
+} from '../components/UiFeedback';
 
 const DevicePage = () => {
   const [devices, setDevices] = useState([]);
   const [opds, setOpds] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useModalEscape(Boolean(editModal), () => setEditModal(null));
 
   const filteredDevices = useMemo(() => {
     if (!searchQuery.trim()) return devices;
     const q = searchQuery.toLowerCase();
-    return devices.filter(d =>
-      (d.sn || '').toLowerCase().includes(q) ||
-      (d.lokasi || '').toLowerCase().includes(q) ||
-      (d.device_name || '').toLowerCase().includes(q) ||
-      (d.opd || '').toLowerCase().includes(q)
+    return devices.filter(
+      (d) =>
+        (d.sn || '').toLowerCase().includes(q) ||
+        (d.lokasi || '').toLowerCase().includes(q) ||
+        (d.device_name || '').toLowerCase().includes(q) ||
+        (d.opd || '').toLowerCase().includes(q)
     );
   }, [devices, searchQuery]);
 
-  const token = localStorage.getItem('access_token');
-  const headers = { Authorization: `Bearer ${token}` };
+  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / itemsPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedDevices = useMemo(() => {
+    const start = (safePage - 1) * itemsPerPage;
+    return filteredDevices.slice(start, start + itemsPerPage);
+  }, [filteredDevices, safePage, itemsPerPage]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    setIsFetching(true);
+    setErrorMsg('');
+    const token = localStorage.getItem('access_token');
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       const [resDev, resOpd] = await Promise.all([
-        axios.get(`${API}/devices`, { headers }),
-        axios.get(`${API}/opd`, { headers }),
+        axios.get(`${API_BASE}/devices`, { headers }),
+        axios.get(`${API_BASE}/opd`, { headers }),
       ]);
-      setDevices(resDev.data);
-      setOpds(resOpd.data);
-    } catch (err) { console.error('Gagal mengambil data device', err); }
-  };
+      setDevices(Array.isArray(resDev.data) ? resDev.data : []);
+      setOpds(Array.isArray(resOpd.data) ? resOpd.data : []);
+    } catch (err) {
+      console.error('Gagal mengambil data perangkat', err);
+      setErrorMsg(
+        err.response?.data?.error || 'Tidak dapat memuat daftar mesin kiosk dari server.'
+      );
+    } finally {
+      setIsFetching(false);
+    }
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleUnbind = async (sn) => {
-    if (!confirm(`Yakin ingin melepas perangkat "${sn}" dari instansi?\n\nPerangkat akan ter-logout otomatis dari kiosk.`)) return;
-    setIsLoading(true);
+    const ok = await confirmAction({
+      title: 'Lepas Kaitan Perangkat?',
+      text: `Perangkat "${sn}" akan dilepas dari instansi OPD dan otomatis keluar dari sesi kiosk.`,
+      confirmText: 'Ya, Lepas Kaitan',
+      isDanger: false,
+    });
+    if (!ok) return;
+    setIsSaving(true);
+    const token = localStorage.getItem('access_token');
     try {
-      const res = await axios.put(`${API}/devices/${sn}/unbind`, {}, { headers });
-      alert(res.data.message || 'Device berhasil dilepas!');
+      const res = await axios.put(
+        `${API_BASE}/devices/${sn}/unbind`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      notifyAlert({
+        icon: 'success',
+        title: 'Kaitan Dilepas',
+        text: res.data.message || 'Perangkat berhasil dilepas dari instansi.',
+        timer: 1800,
+      });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal melepas device');
-    } finally { setIsLoading(false); }
-  };
-
-  const handleUpdate = async () => {
-    if (!editModal) return;
-    setIsLoading(true);
-    try {
-      await axios.put(`${API}/devices/${editModal.sn}`, editModal, { headers });
-      alert('Device berhasil diperbarui!');
-      setEditModal(null);
-      fetchData();
-    } catch (err) {
-      alert(err.response?.data?.error || 'Gagal memperbarui device');
-    } finally { setIsLoading(false); }
-  };
-
-  const handleDelete = async (sn) => {
-    if (!confirm(`Yakin ingin HAPUS PERMANEN Device "${sn}"?\n\nData presensi terkait akan terhapus.`)) return;
-    try {
-      await axios.delete(`${API}/devices/${sn}`, { headers });
-      alert(`Device "${sn}" berhasil dihapus!`);
-      fetchData();
-    } catch (err) {
-      alert(err.response?.data?.error || 'Gagal menghapus device');
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Melepas Kaitan',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat melepas kaitan perangkat.',
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  const handleUpdate = async (e) => {
+    if (e) e.preventDefault();
+    if (!editModal) return;
+    setIsSaving(true);
+    const token = localStorage.getItem('access_token');
+    try {
+      await axios.put(`${API_BASE}/devices/${editModal.sn}`, editModal, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      notifyAlert({
+        icon: 'success',
+        title: 'Tersimpan',
+        text: 'Konfigurasi perangkat kiosk berhasil diperbarui.',
+        timer: 1600,
+      });
+      setEditModal(null);
+      fetchData();
+    } catch (err) {
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menyimpan',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menyimpan konfigurasi.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (sn) => {
+    const ok = await confirmAction({
+      title: 'Hapus Permanen Perangkat?',
+      text: `Perangkat "${sn}" akan dihapus permanen dari registri perangkat kiosk.`,
+      confirmText: 'Ya, Hapus Permanen',
+    });
+    if (!ok) return;
+    const token = localStorage.getItem('access_token');
+    try {
+      await axios.delete(`${API_BASE}/devices/${sn}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      notifyAlert({
+        icon: 'success',
+        title: 'Terhapus',
+        text: `Perangkat "${sn}" telah dihapus dari sistem.`,
+        timer: 1600,
+      });
+      fetchData();
+    } catch (err) {
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menghapus',
+        text: err.response?.data?.error || 'Terjadi kesalahan saat menghapus perangkat.',
+      });
+    }
+  };
+
+  const activeCount = devices.filter((d) => d.verified).length;
+
   return (
-    <div className="p-8 w-full max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-2"><MonitorSmartphone size={24} /> Data Perangkat</h1>
-          <p className="text-gray-500 text-sm mt-1">Daftar mesin kiosk yang terdaftar di sistem</p>
-        </div>
-      </div>
-
-      {/* Info Banner */}
-      <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3 mb-6">
-        <Info size={18} className="text-blue-600 mt-0.5 shrink-0" />
-        <p className="text-xs text-blue-700">Perangkat didaftarkan otomatis saat Admin login di Kiosk Mobile. Gunakan <b>Unbind</b> untuk melepas perangkat dari instansi (perangkat perlu aktivasi ulang).</p>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-          <div className="relative w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input type="text" placeholder="Cari SN, Lokasi, atau Nama Device..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" />
+    <div className="w-full space-y-5">
+      {/* Header Standar Konfigurasi */}
+      <div className="surface-card p-5 sm:px-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
+            <MonitorSmartphone size={20} aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight tabular-nums">
+              Konfigurasi Mesin Kiosk ({devices.length})
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Pemantauan terminal biometrik lapangan, status ikatan OPD, dan proteksi keaslian wajah
+            </p>
           </div>
         </div>
+        <div className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 tabular-nums">
+          <CheckCircle size={15} aria-hidden="true" />
+          <span>{activeCount} Mesin Terverifikasi</span>
+        </div>
+      </div>
+
+      {/* Tabel Standar Konfigurasi */}
+      <div className="surface-card overflow-hidden">
+        <div className="gov-table-toolbar">
+          <div className="w-full sm:w-80">
+            <label htmlFor="device-search-input" className="sr-only">
+              Cari Nomor Seri, Lokasi, Nama Perangkat, atau OPD
+            </label>
+            <div className="relative">
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                size={16}
+                aria-hidden="true"
+              />
+              <input
+                id="device-search-input"
+                type="text"
+                placeholder="Cari SN, lokasi, nama perangkat, atau OPD..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="gov-input pl-9"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
+              <Info size={14} className="text-blue-700 shrink-0" aria-hidden="true" />
+              <span>Terdaftar otomatis saat aktivasi aplikasi Kiosk Mobile</span>
+            </span>
+            <span className="hidden sm:inline text-slate-300" aria-hidden="true">|</span>
+            <span className="font-semibold text-slate-700 tabular-nums">
+              Total <b className="text-slate-900">{filteredDevices.length}</b> perangkat
+            </span>
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm min-w-[950px]">
+          <table className="gov-table min-w-[1040px]">
             <thead>
-              <tr className="bg-gray-50 text-gray-600">
-                <th className="p-4 border-b font-semibold whitespace-nowrap">SN Mesin</th>
-                <th className="p-4 border-b font-semibold">Instansi (OPD)</th>
-                <th className="p-4 border-b font-semibold">Lokasi</th>
-                <th className="p-4 border-b font-semibold">Status</th>
-                <th className="p-4 border-b font-semibold">Terdaftar Oleh</th>
-                <th className="p-4 border-b font-semibold whitespace-nowrap">Terakhir Aktif</th>
-                <th className="p-4 border-b font-semibold text-center">Anti-Spoof</th>
-                <th className="p-4 border-b font-semibold text-center w-40 sticky right-0 bg-gray-50">Aksi</th>
+              <tr>
+                <th className="w-14 text-center">No</th>
+                <th className="whitespace-nowrap">SN Mesin</th>
+                <th>Instansi OPD</th>
+                <th>Lokasi Penempatan</th>
+                <th className="w-32">Status</th>
+                <th>Terdaftar Oleh</th>
+                <th className="whitespace-nowrap">Terakhir Aktif</th>
+                <th className="w-32 text-center">Anti-Spoof</th>
+                <th className="w-52 text-center sticky right-0 bg-slate-50 border-l border-slate-200">
+                  Aksi
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredDevices.map(d => (
-                <tr key={d.sn} className="border-b border-gray-50 hover:bg-blue-50/30 transition">
-                  <td className="p-4 whitespace-nowrap">
-                    <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{d.sn}</span>
-                    {d.device_name && <div className="text-[10px] text-gray-400 mt-1">{d.device_name}</div>}
-                  </td>
-                  <td className="p-4 font-semibold text-gray-700">{d.opd || <span className="text-gray-400 italic">Tidak terikat</span>}</td>
-                  <td className="p-4 text-gray-600">{d.lokasi || '-'}</td>
-                  <td className="p-4">
-                    {d.verified
-                      ? <span className="flex items-center gap-1 text-green-600 font-semibold text-xs"><CheckCircle size={14} /> Aktif</span>
-                      : <span className="flex items-center gap-1 text-red-500 font-semibold text-xs"><XCircle size={14} /> Nonaktif</span>}
-                  </td>
-                  <td className="p-4">{d.registered_by_name ? <span className="text-xs font-medium text-gray-700">{d.registered_by_name}</span> : <span className="text-gray-400 text-xs">—</span>}</td>
-                  <td className="p-4 text-xs text-gray-500 whitespace-nowrap">{d.last_activity || 'Belum pernah'}</td>
-                  <td className="p-4 text-center">
-                    {(d.anti_spoofing_enabled !== false)
-                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 ring-1 ring-green-200" title="Anti-Spoofing aktif"><Shield size={12} /> Aktif</span>
-                      : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-200" title="Anti-Spoofing dinonaktifkan"><ShieldOff size={12} /> Off</span>}
-                  </td>
-                  <td className="p-4 text-center sticky right-0 bg-white">
-                    <div className="flex justify-center gap-1">
-                      {d.verified && d.opd && (
-                        <button onClick={() => handleUnbind(d.sn)} disabled={isLoading}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition" title="Lepas ikatan">
-                          <Unlink size={13} /> Unbind
-                        </button>
-                      )}
-                      <button onClick={() => setEditModal({ sn: d.sn, name: d.name || '', nama_lokasi: d.lokasi || '', opd_id: d.opd_id || '', verified: d.verified, anti_spoofing_enabled: d.anti_spoofing_enabled !== false })} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit"><Pencil size={15} /></button>
-                      <button onClick={() => handleDelete(d.sn)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="Hapus Permanen"><Trash2 size={15} /></button>
-                    </div>
+              {isFetching ? (
+                <TableLoadingRow colSpan={9} label="Memuat daftar perangkat kiosk..." />
+              ) : errorMsg ? (
+                <TableErrorRow colSpan={9} message={errorMsg} onRetry={fetchData} />
+              ) : paginatedDevices.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-16 px-4 text-center">
+                    <p className="text-sm font-bold text-slate-900">
+                      {searchQuery
+                        ? 'Perangkat Kiosk Tidak Ditemukan'
+                        : 'Belum Ada Perangkat Kiosk Terdaftar'}
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      {searchQuery
+                        ? `Tidak ada SN atau lokasi yang cocok dengan "${searchQuery}".`
+                        : 'Perangkat akan muncul secara otomatis setelah diaktifkan melalui aplikasi Kiosk Mobile.'}
+                    </p>
                   </td>
                 </tr>
-              ))}
-              {filteredDevices.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-gray-400">{searchQuery ? 'Tidak ditemukan.' : 'Belum ada perangkat terdaftar.'}</td></tr>}
+              ) : (
+                paginatedDevices.map((d, i) => (
+                  <tr key={d.sn}>
+                    <td className="text-center text-xs font-mono text-slate-600 tabular-nums">
+                      {(safePage - 1) * itemsPerPage + i + 1}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-300">
+                        {d.sn}
+                      </span>
+                      {d.device_name && (
+                        <div className="text-xs text-slate-600 mt-1 font-medium">
+                          {d.device_name}
+                        </div>
+                      )}
+                    </td>
+                    <td className="font-semibold text-slate-900">
+                      {d.opd || (
+                        <span className="text-slate-600 italic font-normal">Belum terikat</span>
+                      )}
+                    </td>
+                    <td className="text-slate-700 text-xs">{d.lokasi || '-'}</td>
+                    <td>
+                      {d.verified ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs">
+                          <CheckCircle size={13} aria-hidden="true" />
+                          <span>Aktif</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-red-50 text-red-800 border border-red-300 font-bold text-xs">
+                          <XCircle size={13} aria-hidden="true" />
+                          <span>Nonaktif</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-xs font-semibold text-slate-700">
+                      {d.registered_by_name || '-'}
+                    </td>
+                    <td className="text-xs text-slate-700 whitespace-nowrap font-mono tabular-nums">
+                      {d.last_activity || 'Belum pernah'}
+                    </td>
+                    <td className="text-center">
+                      {d.anti_spoofing_enabled !== false ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300"
+                          title="Proteksi Anti-Spoofing aktif"
+                        >
+                          <Shield size={12} aria-hidden="true" />
+                          <span>Aktif</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300"
+                          title="Proteksi Anti-Spoofing dinonaktifkan"
+                        >
+                          <ShieldOff size={12} aria-hidden="true" />
+                          <span>Nonaktif</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-center sticky right-0 bg-white border-l border-slate-200">
+                      <div className="flex justify-center items-center gap-1.5">
+                        {d.verified && d.opd && (
+                          <button
+                            type="button"
+                            onClick={() => handleUnbind(d.sn)}
+                            disabled={isSaving}
+                            aria-label={`Lepas kaitan instansi perangkat ${d.sn}`}
+                            title="Lepas kaitan dari OPD"
+                            className="inline-flex items-center justify-center gap-1 min-h-[44px] px-3 py-2 text-xs font-bold text-amber-950 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 active:translate-y-px border border-amber-400 rounded-lg transition-all"
+                          >
+                            <Unlink size={13} aria-hidden="true" />
+                            <span>Lepas Kaitan</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditModal({
+                              sn: d.sn,
+                              name: d.name || '',
+                              nama_lokasi: d.lokasi || '',
+                              opd_id: d.opd_id || '',
+                              verified: d.verified,
+                              anti_spoofing_enabled: d.anti_spoofing_enabled !== false,
+                            })
+                          }
+                          aria-label={`Ubah konfigurasi perangkat ${d.sn}`}
+                          title="Ubah Perangkat"
+                          className="gov-icon-btn text-blue-700 hover:bg-blue-50 border border-transparent hover:border-blue-200"
+                        >
+                          <Pencil size={16} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(d.sn)}
+                          aria-label={`Hapus permanen perangkat ${d.sn}`}
+                          title="Hapus Permanen"
+                          className="gov-icon-btn text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200"
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        <TablePaginationBar
+          currentPage={safePage}
+          totalItems={filteredDevices.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(val) => {
+            setItemsPerPage(val);
+            setCurrentPage(1);
+          }}
+          unitLabel="perangkat"
+        />
       </div>
 
-      {/* Edit Modal */}
+      {/* Modal Ubah Perangkat */}
       {editModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditModal(null)}>
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Edit Device — <span className="font-mono text-blue-600">{editModal.sn}</span></h3>
-              <button onClick={() => setEditModal(null)} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
+        <div
+          className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => setEditModal(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-edit-device-title"
+            className="surface-modal w-full max-w-lg overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 bg-[#0B1120] text-white flex justify-between items-center">
+              <h3 id="modal-edit-device-title" className="text-base font-extrabold">
+                Ubah Perangkat: <span className="font-mono text-sky-300">{editModal.sn}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditModal(null)}
+                aria-label="Tutup dialog ubah perangkat"
+                className="gov-icon-btn text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 mb-1 block">Nama Device</label>
-                <input type="text" value={editModal.name} onChange={e => setEditModal({...editModal, name: e.target.value})} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 mb-1 block">Lokasi</label>
-                <input type="text" value={editModal.nama_lokasi} onChange={e => setEditModal({...editModal, nama_lokasi: e.target.value})} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 mb-1 block">Instansi</label>
-                <select value={editModal.opd_id} onChange={e => setEditModal({...editModal, opd_id: e.target.value})} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                  <option value="">-</option>
-                  {opds.map(o => <option key={o.id} value={o.id}>{o.nama}</option>)}
-                </select>
-              </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={editModal.verified} onChange={e => setEditModal({...editModal, verified: e.target.checked})} className="w-4 h-4 rounded" />
-                  <span className="text-sm font-semibold text-gray-700">Verified</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Anti-Spoofing Toggle */}
-            <div className={`mt-4 rounded-xl border-2 p-4 transition-all ${
-              editModal.anti_spoofing_enabled
-                ? 'border-green-200 bg-green-50/30'
-                : 'border-amber-200 bg-amber-50/30'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${
-                    editModal.anti_spoofing_enabled ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
-                  }`}>
-                    {editModal.anti_spoofing_enabled ? <Shield size={20} /> : <ShieldOff size={20} />}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-800">Fitur Anti-Spoofing (Liveness)</h4>
-                    <p className="text-[11px] text-gray-500 mt-0.5">Analisis temporal multi-frame untuk mendeteksi foto cetak dan layar digital.</p>
-                  </div>
+            <form onSubmit={handleUpdate} className="p-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="edit-device-name"
+                    className="text-xs font-bold text-slate-800 mb-1.5 block"
+                  >
+                    Nama Perangkat
+                  </label>
+                  <input
+                    id="edit-device-name"
+                    type="text"
+                    value={editModal.name}
+                    onChange={(e) => setEditModal({ ...editModal, name: e.target.value })}
+                    className="gov-input"
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setEditModal({...editModal, anti_spoofing_enabled: !editModal.anti_spoofing_enabled})}
-                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    editModal.anti_spoofing_enabled
-                      ? 'bg-green-500 focus:ring-green-400'
-                      : 'bg-gray-300 focus:ring-gray-400'
+                <div>
+                  <label
+                    htmlFor="edit-device-lokasi"
+                    className="text-xs font-bold text-slate-800 mb-1.5 block"
+                  >
+                    Lokasi Penempatan
+                  </label>
+                  <input
+                    id="edit-device-lokasi"
+                    type="text"
+                    value={editModal.nama_lokasi}
+                    onChange={(e) => setEditModal({ ...editModal, nama_lokasi: e.target.value })}
+                    className="gov-input"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="edit-device-opd"
+                    className="text-xs font-bold text-slate-800 mb-1.5 block"
+                  >
+                    Instansi OPD
+                  </label>
+                  <select
+                    id="edit-device-opd"
+                    value={editModal.opd_id}
+                    onChange={(e) => setEditModal({ ...editModal, opd_id: e.target.value })}
+                    className="gov-select"
+                  >
+                    <option value="">Belum Terikat OPD</option>
+                    {opds.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nama}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2.5 min-h-[44px] px-3 py-2 w-full rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 select-none">
+                    <input
+                      type="checkbox"
+                      checked={editModal.verified}
+                      onChange={(e) => setEditModal({ ...editModal, verified: e.target.checked })}
+                      className="w-4 h-4 rounded accent-blue-700 shrink-0"
+                    />
+                    <span className="text-xs font-bold text-slate-900">
+                      Status Terverifikasi (Aktif)
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Sakelar Anti-Spoofing Aksesibel */}
+              <div
+                className={`rounded-xl border p-4 ${
+                  editModal.anti_spoofing_enabled
+                    ? 'border-emerald-300 bg-emerald-50/70'
+                    : 'border-amber-400 bg-amber-50/80'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`p-2.5 rounded-lg border shrink-0 ${
+                        editModal.anti_spoofing_enabled
+                          ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                          : 'bg-amber-100 border-amber-300 text-amber-900'
+                      }`}
+                    >
+                      {editModal.anti_spoofing_enabled ? (
+                        <Shield size={20} aria-hidden="true" />
+                      ) : (
+                        <ShieldOff size={20} aria-hidden="true" />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Proteksi Keaslian Wajah (Anti-Spoofing)
+                      </h4>
+                      <p className="text-xs text-slate-700 mt-0.5 leading-relaxed">
+                        Analisis multi-bingkai untuk menolak percobaan kecurangan menggunakan foto cetak maupun layar gawai.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={editModal.anti_spoofing_enabled}
+                    aria-label="Aktifkan proteksi keaslian wajah Anti-Spoofing"
+                    onClick={() =>
+                      setEditModal({
+                        ...editModal,
+                        anti_spoofing_enabled: !editModal.anti_spoofing_enabled,
+                      })
+                    }
+                    className="min-h-[44px] min-w-[56px] inline-flex items-center justify-center p-1 shrink-0 rounded-lg"
+                  >
+                    <span
+                      className={`relative inline-block w-12 h-7 rounded-full border transition-colors ${
+                        editModal.anti_spoofing_enabled
+                          ? 'bg-emerald-700 border-emerald-800'
+                          : 'bg-slate-500 border-slate-600'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${
+                          editModal.anti_spoofing_enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </div>
+
+                <p
+                  className={`mt-2.5 text-xs font-bold ${
+                    editModal.anti_spoofing_enabled ? 'text-emerald-900' : 'text-amber-950'
                   }`}
                 >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
-                    editModal.anti_spoofing_enabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
+                  {editModal.anti_spoofing_enabled
+                    ? 'Proteksi keaslian wajah aktif: perangkat terlindungi dari serangan pemalsuan foto atau layar.'
+                    : 'Perhatian: Pemeriksaan keaslian wajah dimatikan khusus pada perangkat ini.'}
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditModal(null)}
+                  className="gov-btn-secondary"
+                >
+                  Batal
+                </button>
+                <button type="submit" disabled={isSaving} className="gov-btn-primary">
+                  {isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </button>
               </div>
-              <p className={`mt-2 text-[11px] font-medium ${
-                editModal.anti_spoofing_enabled ? 'text-green-700' : 'text-amber-600'
-              }`}>
-                {editModal.anti_spoofing_enabled
-                  ? '✅ Aktif — Perangkat ini dilindungi dari serangan presentasi'
-                  : '⚠️ Nonaktif — Liveness detection dimatikan untuk perangkat ini'}
-              </p>
-              {!editModal.anti_spoofing_enabled && (
-                <p className="mt-1.5 text-[10px] text-amber-600 italic">
-                  Matikan hanya jika lokasi mesin memiliki pencahayaan buruk yang menghambat presensi.
-                </p>
-              )}
-            </div>
-            <button onClick={handleUpdate} disabled={isLoading} className="mt-5 w-full bg-blue-600 text-white font-bold p-2.5 rounded-lg hover:bg-blue-700 transition">{isLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
+            </form>
           </div>
         </div>
       )}

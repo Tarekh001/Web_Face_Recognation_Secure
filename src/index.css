@@ -2,42 +2,196 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Canvas & Global Layout */
-html, body, #root {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100vh;
-  background-color: #f8fafc;
-  font-family: 'Plus Jakarta Sans', 'Poppins', sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* Token Sistem Desain Modern Executive Civic (ENERGY 2 / RHYTHM 2 / MOTION 2) */
+:root {
+  color-scheme: light;
+  --bg-canvas: #f3f6fa;
+  --surface-card: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-sidebar: #0b1120;
+  --border-card: #dce3ec;
+  --border-subtle: #cbd5e1;
+  --border-control: #64748b;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --accent-primary: #1d4ed8;
+  --accent-hover: #1e40af;
+  --focus-ring: #1d4ed8;
 }
 
-/* Glassmorphism & Soft UI Helpers */
+@layer base {
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100dvh;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Semantik Kursor Elemen Interaktif (R-39) */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  a[href],
+  label[for],
+  label:has(input[type="checkbox"]:not(:disabled)),
+  label:has(input[type="radio"]:not(:disabled)),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /* Kontras Placeholder & Batas Kontrol Form >= 3.0:1 / 4.5:1 (R-25) */
+  input::placeholder,
+  textarea::placeholder {
+    color: #64748b;
+    opacity: 1;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    border-color: var(--border-control);
+  }
+
+  /* Indikator Fokus Keyboard Kontras Tinggi >= 3.0:1 (R-32) */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [role="switch"]:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--focus-ring) !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Angka Sejajar Vertikal untuk Tabel Data Padat (R-06) */
+  table td,
+  .font-mono,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Arsitektur Komponen Modern Executive Civic (R-10, R-11, R-12, MOTION 2) */
 @layer components {
-  .glass-card {
-    @apply bg-white/85 backdrop-blur-md border border-white/60 shadow-glass rounded-2xl;
+  .glass-card,
+  .surface-card {
+    background-color: var(--surface-card);
+    border: 1px solid var(--border-card);
+    @apply rounded-2xl shadow-card transition-[border-color,box-shadow] duration-200;
   }
-  .glass-panel {
-    @apply bg-white/90 backdrop-blur-xl border border-slate-200/80 shadow-soft-sm rounded-2xl;
+
+  .glass-panel,
+  .surface-panel {
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    @apply rounded-xl;
   }
-  .glass-modal {
-    @apply bg-white/95 backdrop-blur-2xl border border-white/80 shadow-glass-lg rounded-3xl;
+
+  .glass-modal,
+  .surface-modal {
+    background-color: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    @apply rounded-2xl shadow-modal;
+  }
+
+  .gov-input {
+    @apply w-full min-h-[44px] px-3.5 py-2 bg-white border border-slate-500 rounded-lg text-sm text-slate-900 shadow-soft-xs transition-all duration-150 hover:border-slate-700 focus:border-blue-700 focus:ring-4 focus:ring-blue-700/10;
+  }
+
+  .gov-select {
+    @apply w-full min-h-[44px] px-3.5 py-2 bg-white border border-slate-500 rounded-lg text-sm text-slate-900 shadow-soft-xs transition-all duration-150 hover:border-slate-700 focus:border-blue-700 focus:ring-4 focus:ring-blue-700/10;
+  }
+
+  .gov-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-blue-700 hover:bg-blue-800 active:bg-blue-900 active:translate-y-px text-white text-xs sm:text-sm font-bold shadow-btn-primary hover:shadow-btn-primary-hover transition-all duration-150 disabled:opacity-50 disabled:shadow-none disabled:active:translate-y-0;
+  }
+
+  .gov-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-white hover:bg-slate-50 active:bg-slate-100 active:translate-y-px text-slate-800 border border-slate-500 hover:border-slate-700 text-xs sm:text-sm font-bold shadow-soft-xs transition-all duration-150 disabled:opacity-50 disabled:active:translate-y-0;
+  }
+
+  .gov-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-red-700 hover:bg-red-800 active:bg-red-900 active:translate-y-px text-white text-xs sm:text-sm font-bold shadow-soft-xs transition-all duration-150 disabled:opacity-50 disabled:active:translate-y-0;
+  }
+
+  .gov-icon-btn {
+    @apply inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-lg transition-all duration-150 active:translate-y-px;
+  }
+
+  /* Standar Tunggal Anatomi Tabel Enterprise (Menyeragamkan Seluruh Halaman & Menu Konfigurasi) */
+  .gov-table-toolbar {
+    @apply px-5 py-3.5 border-b border-slate-200/90 bg-slate-50/75 flex flex-wrap items-center justify-between gap-3 min-h-[68px];
+  }
+
+  .gov-table {
+    @apply w-full text-left border-collapse text-sm;
+  }
+
+  .gov-table thead tr {
+    @apply bg-slate-50/95 border-b border-slate-200 text-slate-700 text-[11px] font-bold uppercase tracking-wider;
+  }
+
+  .gov-table thead th {
+    @apply h-11 px-4 py-3 align-middle font-bold select-none whitespace-nowrap;
+  }
+
+  .gov-table tbody {
+    @apply divide-y divide-slate-200/80 text-slate-800 bg-white;
+  }
+
+  .gov-table tbody tr {
+    @apply transition-colors duration-150 hover:bg-blue-50/40;
+  }
+
+  .gov-table tbody td {
+    @apply h-[56px] px-4 py-3 align-middle;
   }
 }
 
-/* Custom Thin Scrollbar */
+/* Penghormatan Preferensi Pengurangan Gerak (R-39) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Scrollbar Halus namun Berkontras Jelas */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #eef2f7;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #94a3b8;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #64748b;
 }

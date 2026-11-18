@@ -1,107 +1,183 @@
+import { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, UserCircle, LogOut, Sparkles } from 'lucide-react';
+import {
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ShieldCheck,
+  UserCircle,
+  LogOut,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+} from 'lucide-react';
+import API_BASE from '../config/api';
 
-const Header = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, onLogout }) => {
+const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen, onLogout }) => {
   const location = useLocation();
   const userRole = localStorage.getItem('user_role');
   const userNip = localStorage.getItem('user_username') || localStorage.getItem('user_nip') || 'Admin';
 
-  // Map route to human readable breadcrumb title
+  // Status koneksi nyata ke backend API (R-36 & R-38)
+  const [apiStatus, setApiStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
+
+  const checkApiConnection = useCallback(async () => {
+    setApiStatus('checking');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`${API_BASE}/opd/list`, {
+        method: 'GET',
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      setApiStatus(res.ok ? 'online' : 'offline');
+    } catch {
+      setApiStatus('offline');
+    } finally {
+      clearTimeout(timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkApiConnection();
+    const interval = setInterval(checkApiConnection, 30000);
+    const onOnline = () => checkApiConnection();
+    const onOffline = () => setApiStatus('offline');
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [checkApiConnection]);
+
   const getPageTitle = (path) => {
-    if (path.startsWith('/dashboard')) return { title: 'Dashboard Utama', category: 'Overview' };
-    if (path.startsWith('/manage-asn')) return { title: 'Data Personel ASN', category: 'Manajemen' };
-    if (path.startsWith('/manage-non-asn')) return { title: 'Data Personel Non-ASN', category: 'Manajemen' };
-    if (path.startsWith('/register')) return { title: 'Registrasi Biometrik Wajah', category: 'Manajemen' };
-    if (path.startsWith('/kegiatan')) return { title: 'Jadwal Kegiatan Luar Kantor', category: 'Kegiatan' };
-    if (path.startsWith('/laporan-kegiatan')) return { title: 'Rekap Presensi Kegiatan', category: 'Laporan' };
-    if (path.startsWith('/laporan/asn')) return { title: 'Laporan Presensi Harian ASN', category: 'Laporan' };
-    if (path.startsWith('/laporan/non-asn')) return { title: 'Laporan Presensi Harian Non-ASN', category: 'Laporan' };
-    if (path.startsWith('/master-data/opd')) return { title: 'Master Data OPD', category: 'Sistem' };
-    if (path.startsWith('/master-data/devices')) return { title: 'Konfigurasi Mesin Kiosk', category: 'Sistem' };
-    if (path.startsWith('/master-data/admin')) return { title: 'Manajemen Akun Admin', category: 'Sistem' };
-    if (path.startsWith('/settings')) return { title: 'Pengaturan Jam Kerja & Libur', category: 'Sistem' };
-    if (path.startsWith('/audit-trail')) return { title: 'Audit Trail & Aktivitas', category: 'Sistem' };
-    return { title: 'Smart Presensi', category: 'Portal' };
+    if (path.startsWith('/dashboard')) return { title: 'Dashboard Utama', category: 'Ringkasan' };
+    if (path.startsWith('/manage-asn')) return { title: 'Data Pegawai ASN', category: 'Kepegawaian' };
+    if (path.startsWith('/manage-non-asn')) return { title: 'Data Pegawai Non-ASN', category: 'Kepegawaian' };
+    if (path.startsWith('/jam-kerja')) return { title: 'Manajemen Jam Kerja & Shift', category: 'Kepegawaian' };
+    if (path.startsWith('/register')) return { title: 'Pendaftaran Biometrik Wajah', category: 'Kepegawaian' };
+    if (path.startsWith('/kegiatan')) return { title: 'Jadwal Kegiatan Luar Kantor', category: 'Dinas Luar' };
+    if (path.startsWith('/laporan-kegiatan')) return { title: 'Rekapitulasi Presensi Kegiatan', category: 'Pelaporan' };
+    if (path.startsWith('/laporan/asn')) return { title: 'Laporan Presensi Harian ASN', category: 'Pelaporan' };
+    if (path.startsWith('/laporan/non-asn')) return { title: 'Laporan Presensi Harian Non-ASN', category: 'Pelaporan' };
+    if (path.startsWith('/master-data/opd') || path === '/master-data') return { title: 'Master Data OPD', category: 'Konfigurasi Sistem' };
+    if (path.startsWith('/master-data/devices')) return { title: 'Konfigurasi Perangkat Kiosk', category: 'Konfigurasi Sistem' };
+    if (path.startsWith('/master-data/admin')) return { title: 'Manajemen Akun Admin OPD', category: 'Konfigurasi Sistem' };
+    if (path.startsWith('/master-data/spot-sync')) return { title: 'Sinkronisasi Log Presensi SPOT', category: 'Konfigurasi Sistem' };
+    if (path.startsWith('/settings')) return { title: 'Pengaturan Jam Kiosk & Hari Libur', category: 'Konfigurasi Sistem' };
+    if (path.startsWith('/audit-trail')) return { title: 'Log Audit & Aktivitas Sistem', category: 'Konfigurasi Sistem' };
+    return { title: 'Portal Admin Presensi', category: 'Sistem Presensi' };
   };
 
   const pageInfo = getPageTitle(location.pathname);
 
   return (
-    <header className="sticky top-0 z-30 w-full bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-soft-xs transition-all">
-      <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
-        
-        {/* Left Section: Mobile toggle, Collapse toggle, Breadcrumbs */}
-        <div className="flex items-center gap-3 sm:gap-4">
-          {/* Mobile Drawer Trigger */}
+    <header className="sticky top-0 z-30 w-full bg-white border-b border-[#DCE3EC] shadow-soft-xs">
+      <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+        {/* Kiri: Tombol Menu Mobile berlabel, Toggle Sidebar Desktop, & Judul Halaman */}
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
           <button
+            type="button"
             onClick={() => setIsMobileOpen(true)}
-            className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus:ring-2 focus:ring-blue-500/20"
-            aria-label="Buka Menu"
+            aria-label="Buka menu navigasi"
+            className="lg:hidden inline-flex items-center gap-2 min-h-[44px] px-3 py-2 rounded-lg border border-slate-500 bg-white text-slate-800 hover:bg-slate-50 text-xs font-bold shadow-soft-xs transition-colors shrink-0"
           >
-            <Menu size={20} />
+            <Menu size={18} aria-hidden="true" />
+            <span>Menu</span>
           </button>
 
-          {/* Desktop Collapse Trigger */}
           <button
-            onClick={() => setIsCollapsed(prev => !prev)}
-            className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors focus:ring-2 focus:ring-blue-500/20"
-            title={isCollapsed ? "Perluas Sidebar" : "Perkecil Sidebar"}
+            type="button"
+            onClick={() => setIsCollapsed((prev) => !prev)}
+            aria-label={isCollapsed ? 'Perluas bilah navigasi samping' : 'Perkecil bilah navigasi samping'}
+            title={isCollapsed ? 'Perluas bilah samping' : 'Perkecil bilah samping'}
+            className="hidden lg:inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-lg text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-300 transition-colors shrink-0"
           >
-            {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+            {isCollapsed ? (
+              <PanelLeftOpen size={20} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose size={20} aria-hidden="true" />
+            )}
           </button>
 
-          {/* Breadcrumb Title */}
-          <div className="flex flex-col">
-            <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
+          <div className="flex flex-col min-w-0">
+            <span className="text-[10px] font-bold tracking-wider uppercase text-blue-800 truncate">
               {pageInfo.category}
             </span>
-            <h1 className="text-base sm:text-lg font-extrabold text-slate-800 tracking-tight leading-tight">
+            <h1 className="text-base sm:text-[18px] font-extrabold text-slate-900 tracking-tight leading-tight truncate">
               {pageInfo.title}
             </h1>
           </div>
         </div>
 
-        {/* Right Section: Smart City Live Status, Profile Pill, Logout */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          
-          {/* Live System Indicator */}
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50/80 border border-emerald-200/60 shadow-soft-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="text-[11px] font-bold text-emerald-700 tracking-wide">
-              Smart City AI Online
-            </span>
-          </div>
+        {/* Kanan: Indikator Koneksi API Nyata, Identitas Pengguna, & Tombol Keluar */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={checkApiConnection}
+            title="Klik untuk memeriksa ulang keterhubungan server API"
+            aria-label={`Status koneksi server: ${
+              apiStatus === 'online'
+                ? 'Server Terhubung'
+                : apiStatus === 'offline'
+                  ? 'Server Terputus'
+                  : 'Memeriksa koneksi server'
+            }. Klik untuk periksa ulang.`}
+            className={`hidden md:inline-flex items-center gap-2 min-h-[44px] px-3 py-1.5 rounded-lg border text-xs font-bold transition-all active:translate-y-px ${
+              apiStatus === 'online'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                : apiStatus === 'offline'
+                  ? 'bg-red-50 border-red-300 text-red-800 hover:bg-red-100'
+                  : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            {apiStatus === 'online' ? (
+              <>
+                <Wifi size={14} className="text-emerald-700 shrink-0" aria-hidden="true" />
+                <span>Server Terhubung</span>
+              </>
+            ) : apiStatus === 'offline' ? (
+              <>
+                <WifiOff size={14} className="text-red-700 shrink-0" aria-hidden="true" />
+                <span>Server Terputus</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw size={14} className="animate-spin text-slate-600 shrink-0" aria-hidden="true" />
+                <span>Memeriksa Server</span>
+              </>
+            )}
+          </button>
 
-          {/* User Profile Card */}
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80">
-            <div className="w-8 h-8 rounded-lg bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-700">
-              <UserCircle size={20} />
+          <div className="flex items-center gap-2.5 min-h-[44px] px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-300">
+            <div className="w-7 h-7 rounded-md bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
+              <UserCircle size={18} aria-hidden="true" />
             </div>
             <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-bold text-slate-800 leading-tight max-w-[130px] truncate">
+              <span className="text-xs font-bold text-slate-900 leading-tight max-w-[130px] truncate tabular-nums">
                 {userNip}
               </span>
-              <div className="flex items-center gap-1">
-                <ShieldCheck size={10} className="text-blue-600" />
-                <span className="text-[10px] font-bold tracking-wider text-blue-600 uppercase">
-                  {userRole === 'super_admin' ? 'SUPER ADMIN' : 'ADMIN OPD'}
+              <div className="flex items-center gap-1 mt-0.5">
+                <ShieldCheck size={11} className="text-blue-700 shrink-0" aria-hidden="true" />
+                <span className="text-[10px] font-bold tracking-wider text-blue-800 uppercase">
+                  {userRole === 'super_admin' ? 'Super Admin' : 'Admin OPD'}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Quick Logout Button */}
           <button
+            type="button"
             onClick={onLogout}
-            title="Keluar dari Akun"
-            className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all focus:ring-2 focus:ring-red-500/20"
+            title="Keluar dari akun"
+            aria-label="Keluar dari akun"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-lg text-slate-700 hover:text-red-800 hover:bg-red-50 border border-slate-400 hover:border-red-300 transition-all active:translate-y-px"
           >
-            <LogOut size={18} />
+            <LogOut size={18} aria-hidden="true" />
           </button>
-
         </div>
       </div>
     </header>

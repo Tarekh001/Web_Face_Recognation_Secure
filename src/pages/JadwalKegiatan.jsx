@@ -2,13 +2,31 @@ import { useEffect, useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import Swal from 'sweetalert2';
 import {
-  CalendarDays, Plus, Trash2, X, MapPin, Users, Building2, Globe,
-  Search, Loader2, Navigation, CheckSquare, Square, UserPlus, ShieldCheck
+  CalendarDays,
+  Plus,
+  Trash2,
+  X,
+  MapPin,
+  Users,
+  Building2,
+  Globe,
+  Search,
+  Loader2,
+  Navigation,
+  ShieldCheck,
 } from 'lucide-react';
+import API_BASE from '../config/api';
+import {
+  useModalEscape,
+  ErrorBanner,
+  TableLoadingRow,
+  TableErrorRow,
+  notifyAlert,
+  confirmAction,
+} from '../components/UiFeedback';
 
-// Fix Leaflet default marker icon (webpack/vite bundler issue)
+// Fix Leaflet default marker icon (Vite bundler)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -16,16 +34,12 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-const API_BASE = 'http://127.0.0.1:5000/api';
 const DEFAULT_CENTER = [-6.2088, 106.8456];
 
 const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
 });
 
-// =====================================================================
-// SUB-COMPONENT: Map Interaction Layer (inside MapContainer)
-// =====================================================================
 const MapController = ({ position, radius, onMapClick }) => {
   const map = useMap();
 
@@ -38,7 +52,7 @@ const MapController = ({ position, radius, onMapClick }) => {
 
   useEffect(() => {
     if (position[0] !== 0 && position[1] !== 0) {
-      map.flyTo(position, 16, { duration: 1.2 });
+      map.flyTo(position, 16, { duration: 0.8 });
     }
   }, [position, map]);
 
@@ -58,138 +72,158 @@ const MapController = ({ position, radius, onMapClick }) => {
         <Circle
           center={position}
           radius={radius}
-          pathOptions={{ color: '#0057A4', fillColor: '#0057A4', fillOpacity: 0.1, weight: 2 }}
+          pathOptions={{ color: '#1D4ED8', fillColor: '#1D4ED8', fillOpacity: 0.12, weight: 2 }}
         />
       )}
     </>
   );
 };
 
-// =====================================================================
-// MAIN PAGE COMPONENT
-// =====================================================================
 const JadwalKegiatan = () => {
   const userRole = localStorage.getItem('user_role');
   const isSuperAdmin = userRole === 'super_admin';
 
-  // === Tab State ===
   const [activeTab, setActiveTab] = useState('global'); // 'global' | 'internal'
-
-  // === Data State ===
   const [kegiatanList, setKegiatanList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // === Creation Modal State ===
+  // Creation Modal State
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    nama_kegiatan: '', keterangan: '', alamat_lokasi: '',
-    latitude_target: '', longitude_target: '', radius_toleransi: 100,
-    tanggal_mulai: '', tanggal_selesai: '',
-    jam_mulai: '', jam_selesai: '',
+    nama_kegiatan: '',
+    keterangan: '',
+    alamat_lokasi: '',
+    latitude_target: '',
+    longitude_target: '',
+    radius_toleransi: 100,
+    tanggal_mulai: '',
+    tanggal_selesai: '',
+    jam_mulai: '',
+    jam_selesai: '',
   });
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // === OPD Invitation State (replaces legacy NIP assignment) ===
+  // OPD Invitation State
   const [opdList, setOpdList] = useState([]);
   const [selectedOpdIds, setSelectedOpdIds] = useState([]);
   const [opdSearch, setOpdSearch] = useState('');
   const [isLoadingOpd, setIsLoadingOpd] = useState(false);
+  const [opdError, setOpdError] = useState('');
   const [isGlobalToggle, setIsGlobalToggle] = useState(false);
 
-  // === Helpers ===
+  const resetForm = useCallback(() => {
+    setShowForm(false);
+    setFormData({
+      nama_kegiatan: '',
+      keterangan: '',
+      alamat_lokasi: '',
+      latitude_target: '',
+      longitude_target: '',
+      radius_toleransi: 100,
+      tanggal_mulai: '',
+      tanggal_selesai: '',
+      jam_mulai: '',
+      jam_selesai: '',
+    });
+    setSelectedOpdIds([]);
+    setOpdSearch('');
+  }, []);
+
+  useModalEscape(showForm, resetForm);
+
   const formatDate = (d) => {
-    if (!d) return '—';
+    if (!d) return '-';
     try {
-      return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch { return d; }
+      return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return d;
+    }
   };
 
-  // === API: Fetch Kegiatan ===
   const fetchKegiatan = useCallback(async () => {
     setIsLoading(true);
+    setErrorMsg('');
     try {
       const res = await axios.get(`${API_BASE}/kegiatan`, getAuthHeaders());
       setKegiatanList(Array.isArray(res.data) ? res.data : res.data.data || []);
     } catch (err) {
       console.error('Gagal mengambil data kegiatan:', err);
-    } finally { setIsLoading(false); }
+      setErrorMsg(err.response?.data?.error || 'Tidak dapat memuat daftar jadwal kegiatan dari server.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  useEffect(() => { fetchKegiatan(); }, [fetchKegiatan]);
+  useEffect(() => {
+    fetchKegiatan();
+  }, [fetchKegiatan]);
 
-  // === API: Fetch OPD list (for invitation multi-select) ===
   const fetchOpdList = useCallback(async () => {
     setIsLoadingOpd(true);
+    setOpdError('');
     const token = localStorage.getItem('access_token');
     try {
       const res = await axios.get(`${API_BASE}/opd?scope=global`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      // scope=global returns consistent { id, nama_opd, kode_opd }
       const data = res.data?.data || res.data;
       if (Array.isArray(data)) {
         setOpdList(data);
       } else {
-        console.error("Format data OPD tidak dikenali:", res.data);
         setOpdList([]);
       }
     } catch (err) {
       console.error('Gagal mengambil daftar OPD:', err);
       setOpdList([]);
+      setOpdError('Daftar instansi OPD tidak dapat dimuat.');
     } finally {
       setIsLoadingOpd(false);
     }
   }, []);
 
-  // Fetch OPD list when creation modal is opened
   useEffect(() => {
     if (showForm) {
       fetchOpdList();
     }
   }, [showForm, fetchOpdList]);
 
-  // ─────────────────────────────────
-  // CREATION MODAL LOGIC
-  // ─────────────────────────────────
   const openCreationModal = () => {
     setFormData({
-      nama_kegiatan: '', keterangan: '', alamat_lokasi: '',
-      latitude_target: '', longitude_target: '', radius_toleransi: 100,
-      tanggal_mulai: '', tanggal_selesai: '',
-      jam_mulai: '', jam_selesai: '',
+      nama_kegiatan: '',
+      keterangan: '',
+      alamat_lokasi: '',
+      latitude_target: '',
+      longitude_target: '',
+      radius_toleransi: 100,
+      tanggal_mulai: '',
+      tanggal_selesai: '',
+      jam_mulai: '',
+      jam_selesai: '',
     });
     setIsGlobalToggle(isSuperAdmin);
     setSelectedOpdIds([]);
     setOpdSearch('');
     setShowForm(true);
-    fetchOpdList();
-  };
-
-  const resetForm = () => {
-    setShowForm(false);
-    setFormData({
-      nama_kegiatan: '', keterangan: '', alamat_lokasi: '',
-      latitude_target: '', longitude_target: '', radius_toleransi: 100,
-      tanggal_mulai: '', tanggal_selesai: '',
-      jam_mulai: '', jam_selesai: '',
-    });
-    setSelectedOpdIds([]);
-    setOpdSearch('');
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleNumberChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
+    setFormData((prev) => ({ ...prev, [name]: value === '' ? '' : Number(value) }));
   };
 
   const handleMapInteraction = (lat, lng) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       latitude_target: parseFloat(lat.toFixed(6)),
       longitude_target: parseFloat(lng.toFixed(6)),
@@ -199,44 +233,66 @@ const JadwalKegiatan = () => {
   const handleGeocode = async () => {
     const alamat = formData.alamat_lokasi.trim();
     if (!alamat) {
-      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Masukkan alamat lokasi terlebih dahulu.' });
+      return notifyAlert({
+        icon: 'warning',
+        title: 'Peringatan',
+        text: 'Masukkan alamat lokasi terlebih dahulu.',
+      });
     }
     setIsGeocoding(true);
     try {
-      const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(alamat)}&limit=1`);
+      const res = await axios.get(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(alamat)}&limit=1`
+      );
       if (res.data && res.data.length > 0) {
         const { lat, lon } = res.data[0];
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           latitude_target: parseFloat(parseFloat(lat).toFixed(6)),
           longitude_target: parseFloat(parseFloat(lon).toFixed(6)),
         }));
       } else {
-        Swal.fire({ icon: 'info', title: 'Tidak Ditemukan', text: 'Alamat tidak ditemukan.' });
+        notifyAlert({
+          icon: 'info',
+          title: 'Lokasi Tidak Ditemukan',
+          text: 'Alamat tidak ditemukan pada peta OpenStreetMap. Silakan klik titik koordinat secara langsung di peta.',
+        });
       }
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Gagal Geocoding', text: err.message });
-    } finally { setIsGeocoding(false); }
+      notifyAlert({ icon: 'error', title: 'Gagal Pencarian Alamat', text: err.message });
+    } finally {
+      setIsGeocoding(false);
+    }
   };
 
-  // OPD toggle
   const handleToggleOpd = (opdId) => {
-    setSelectedOpdIds(prev =>
-      prev.includes(opdId) ? prev.filter(id => id !== opdId) : [...prev, opdId]
+    setSelectedOpdIds((prev) =>
+      prev.includes(opdId) ? prev.filter((id) => id !== opdId) : [...prev, opdId]
     );
   };
 
-  // Submit creation
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.nama_kegiatan.trim()) {
-      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Nama kegiatan wajib diisi.' });
+      return notifyAlert({
+        icon: 'warning',
+        title: 'Peringatan',
+        text: 'Nama kegiatan wajib diisi.',
+      });
     }
     if (!formData.tanggal_mulai || !formData.tanggal_selesai) {
-      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Tanggal mulai dan selesai wajib diisi.' });
+      return notifyAlert({
+        icon: 'warning',
+        title: 'Peringatan',
+        text: 'Tanggal mulai dan tanggal selesai wajib diisi.',
+      });
     }
     if (!isGlobalToggle && selectedOpdIds.length === 0) {
-      return Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih minimal satu OPD yang diundang.' });
+      return notifyAlert({
+        icon: 'warning',
+        title: 'Peringatan',
+        text: 'Pilih minimal satu instansi OPD yang diundang.',
+      });
     }
 
     setIsSubmitting(true);
@@ -245,8 +301,10 @@ const JadwalKegiatan = () => {
         nama_kegiatan: formData.nama_kegiatan.trim(),
         keterangan: formData.keterangan.trim(),
         alamat_lokasi: formData.alamat_lokasi.trim(),
-        latitude_target: formData.latitude_target !== '' ? Number(formData.latitude_target) : null,
-        longitude_target: formData.longitude_target !== '' ? Number(formData.longitude_target) : null,
+        latitude_target:
+          formData.latitude_target !== '' ? Number(formData.latitude_target) : null,
+        longitude_target:
+          formData.longitude_target !== '' ? Number(formData.longitude_target) : null,
         radius_toleransi: Number(formData.radius_toleransi) || 100,
         tanggal_mulai: formData.tanggal_mulai,
         tanggal_selesai: formData.tanggal_selesai,
@@ -256,312 +314,490 @@ const JadwalKegiatan = () => {
         invited_opd_ids: isGlobalToggle ? [] : selectedOpdIds,
       };
       await axios.post(`${API_BASE}/kegiatan`, payload, getAuthHeaders());
-      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Kegiatan berhasil ditambahkan.', timer: 2000, showConfirmButton: false });
+      notifyAlert({
+        icon: 'success',
+        title: 'Berhasil',
+        text: 'Jadwal kegiatan berhasil ditambahkan.',
+        timer: 1800,
+      });
       resetForm();
       fetchKegiatan();
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Gagal Menambahkan', text: err.response?.data?.error || err.message });
-    } finally { setIsSubmitting(false); }
-  };
-
-  // === Delete ===
-  const handleDelete = async (id, nama) => {
-    const result = await Swal.fire({
-      icon: 'warning', title: 'Hapus Kegiatan?', text: `"${nama}" akan dihapus permanen.`,
-      showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal',
-    });
-    if (!result.isConfirmed) return;
-    try {
-      await axios.delete(`${API_BASE}/kegiatan/${id}`, getAuthHeaders());
-      Swal.fire({ icon: 'success', title: 'Terhapus', timer: 1500, showConfirmButton: false });
-      fetchKegiatan();
-    } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Gagal Menghapus', text: err.response?.data?.error || err.message });
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menambahkan',
+        text: err.response?.data?.error || err.message,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // === Filtered OPD list ===
-  const filteredOpdList = opdList.filter(o => {
+  const handleDelete = async (id, nama) => {
+    const ok = await confirmAction({
+      title: 'Hapus Jadwal Kegiatan?',
+      text: `Kegiatan "${nama}" akan dihapus secara permanen dari jadwal.`,
+      confirmText: 'Ya, Hapus',
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API_BASE}/kegiatan/${id}`, getAuthHeaders());
+      notifyAlert({
+        icon: 'success',
+        title: 'Terhapus',
+        text: 'Jadwal kegiatan berhasil dihapus.',
+        timer: 1500,
+      });
+      fetchKegiatan();
+    } catch (err) {
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Menghapus',
+        text: err.response?.data?.error || err.message,
+      });
+    }
+  };
+
+  const filteredOpdList = opdList.filter((o) => {
     const nama = (o.nama_opd || o.nama || '').toLowerCase();
     const kode = (o.kode_opd || o.kode || '').toLowerCase();
     const search = opdSearch.toLowerCase();
     return nama.includes(search) || kode.includes(search);
   });
 
-  // Map position
   const mapPosition = [
     formData.latitude_target !== '' ? Number(formData.latitude_target) : DEFAULT_CENTER[0],
     formData.longitude_target !== '' ? Number(formData.longitude_target) : DEFAULT_CENTER[1],
   ];
 
-  // Split data by scope for tabs
-  const globalEvents = kegiatanList.filter(k => k.is_global === true);
-  const internalEvents = kegiatanList.filter(k => k.is_global !== true);
+  const globalEvents = kegiatanList.filter((k) => k.is_global === true);
+  const internalEvents = kegiatanList.filter((k) => k.is_global !== true);
+  const activeEvents = activeTab === 'global' ? globalEvents : internalEvents;
 
-
-
-
-
-
-
-
-
-
-
-
-  // =====================================================================
-  // RENDER
-  // =====================================================================
   return (
-    <main className="p-8 w-full h-full">
-      {/* ── Header ── */}
-      <div className="border-b-2 border-gray-300 pb-4 mb-6 flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-            <CalendarDays size={32} className="text-[#0057A4]" />
-            Jadwal Kegiatan
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Kelola jadwal kegiatan luar kantor & geofencing {isSuperAdmin ? 'seluruh OPD' : 'OPD Anda'}.
-          </p>
+    <div className="space-y-5">
+      {/* Header & Kontrol Tab */}
+      <div className="surface-card p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
+            <CalendarDays size={20} aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+              Jadwal Kegiatan Luar Kantor ({kegiatanList.length})
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Kelola jadwal kegiatan dinas luar dan area geofencing{' '}
+              {isSuperAdmin ? 'seluruh OPD Pemerintah Daerah' : 'instansi OPD Anda'}
+            </p>
+          </div>
         </div>
-        {/* Top action button - contextual to active tab */}
-        {activeTab === 'internal' && !isSuperAdmin && (
-          <button onClick={openCreationModal}
-            className="flex items-center gap-2 bg-[#005bb5] hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-            <Plus size={18} /> Tambah Kegiatan Internal
-          </button>
-        )}
-        {activeTab === 'global' && isSuperAdmin && (
-          <button onClick={openCreationModal}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-            <Globe size={18} /> Buat Kegiatan Global
-          </button>
-        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            role="tablist"
+            aria-label="Cakupan Jadwal Kegiatan"
+            className="inline-flex flex-wrap gap-1.5 bg-slate-100 border border-slate-300 p-1 rounded-lg"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'global'}
+              onClick={() => setActiveTab('global')}
+              className={`inline-flex items-center gap-2 min-h-[44px] px-3.5 py-2 rounded-md text-xs font-bold transition-all active:translate-y-px ${
+                activeTab === 'global'
+                  ? 'bg-blue-700 text-white'
+                  : 'text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Globe size={15} aria-hidden="true" />
+              <span>Lintas OPD</span>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold tabular-nums ${
+                  activeTab === 'global'
+                    ? 'bg-blue-900 text-white'
+                    : 'bg-white text-slate-700 border border-slate-300'
+                }`}
+              >
+                {globalEvents.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'internal'}
+              onClick={() => setActiveTab('internal')}
+              className={`inline-flex items-center gap-2 min-h-[44px] px-3.5 py-2 rounded-md text-xs font-bold transition-all active:translate-y-px ${
+                activeTab === 'internal'
+                  ? 'bg-blue-700 text-white'
+                  : 'text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Building2 size={15} aria-hidden="true" />
+              <span>Internal OPD</span>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold tabular-nums ${
+                  activeTab === 'internal'
+                    ? 'bg-blue-900 text-white'
+                    : 'bg-white text-slate-700 border border-slate-300'
+                }`}
+              >
+                {internalEvents.length}
+              </span>
+            </button>
+          </div>
+
+          {activeTab === 'internal' && !isSuperAdmin && (
+            <button type="button" onClick={openCreationModal} className="gov-btn-primary text-xs">
+              <Plus size={16} aria-hidden="true" />
+              <span>Tambah Kegiatan Internal</span>
+            </button>
+          )}
+          {activeTab === 'global' && isSuperAdmin && (
+            <button type="button" onClick={openCreationModal} className="gov-btn-primary text-xs">
+              <Plus size={16} aria-hidden="true" />
+              <span>Buat Kegiatan Global</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-        <button
-          onClick={() => setActiveTab('global')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'global'
-              ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-200'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}>
-          <Globe size={16} />
-          Undangan Lintas OPD (Global)
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'global' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-500'
-          }`}>{globalEvents.length}</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('internal')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'internal'
-              ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}>
-          <Building2 size={16} />
-          Kegiatan Internal
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'internal' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'
-          }`}>{internalEvents.length}</span>
-        </button>
-      </div>
-
-      {/* ── Data Table ── */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabel Data Jadwal Kegiatan */}
+      <div className="surface-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 text-[11px] font-semibold uppercase tracking-wider">
+            <thead className="bg-slate-50 border-b border-slate-300 text-slate-700 text-xs font-bold uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-4 w-10">#</th>
-                <th className="px-4 py-4">Nama Kegiatan</th>
-                <th className="px-4 py-4">Waktu</th>
-                <th className="px-4 py-4 text-center">Peserta Terdaftar</th>
-                <th className="px-4 py-4 text-center">Aksi</th>
+                <th className="px-4 py-3.5 w-12 text-center">No</th>
+                <th className="px-4 py-3.5">Nama dan Lokasi Kegiatan</th>
+                <th className="px-4 py-3.5">Jadwal dan Radius</th>
+                <th className="px-4 py-3.5 text-center">Cakupan dan Kehadiran</th>
+                <th className="px-4 py-3.5 text-center w-32">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm text-gray-600">
+            <tbody className="divide-y divide-slate-200 text-sm text-slate-800">
               {isLoading ? (
-                <tr><td colSpan="5" className="text-center py-16">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-                    <span className="text-gray-400 text-sm">Memuat data...</span>
-                  </div>
-                </td></tr>
+                <TableLoadingRow colSpan={5} label="Memuat jadwal kegiatan dinas luar..." />
+              ) : errorMsg ? (
+                <TableErrorRow colSpan={5} message={errorMsg} onRetry={fetchKegiatan} />
+              ) : activeEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-16 px-4">
+                    <div className="flex flex-col items-center gap-2.5 max-w-md mx-auto">
+                      <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-600">
+                        <CalendarDays size={22} aria-hidden="true" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-900">
+                        {activeTab === 'global'
+                          ? 'Belum Ada Kegiatan Lintas OPD'
+                          : 'Belum Ada Kegiatan Internal OPD'}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        {activeTab === 'global'
+                          ? 'Kegiatan global yang dijadwalkan untuk seluruh instansi akan tampil di tabel ini.'
+                          : 'Jadwalkan kegiatan dinas luar internal agar pegawai dapat melakukan presensi berbasis lokasi.'}
+                      </p>
+                      {activeTab === 'internal' && !isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={openCreationModal}
+                          className="gov-btn-primary text-xs mt-1"
+                        >
+                          <Plus size={15} aria-hidden="true" />
+                          <span>Tambah Kegiatan Internal Pertama</span>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
               ) : (
-                (() => {
-                  const list = activeTab === 'global' ? globalEvents : internalEvents;
-                  if (list.length === 0) {
-                    return (
-                      <tr><td colSpan="5" className="text-center py-16">
-                        <div className="flex flex-col items-center gap-2">
-                          <CalendarDays size={32} className="text-gray-300" />
-                          <span className="text-gray-400">
-                            {activeTab === 'global'
-                              ? 'Belum ada undangan kegiatan lintas OPD.'
-                              : 'Belum ada kegiatan internal.'}
+                activeEvents.map((row, idx) => (
+                  <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3.5 text-center text-slate-600 font-mono text-xs tabular-nums">
+                      {idx + 1}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="font-bold text-slate-900 text-sm block">
+                        {row.nama_kegiatan}
+                      </span>
+                      {row.keterangan && (
+                        <span className="text-xs text-slate-600 block mt-0.5 line-clamp-2">
+                          {row.keterangan}
+                        </span>
+                      )}
+                      {row.alamat_lokasi && (
+                        <span className="text-xs text-slate-700 flex items-center gap-1.5 mt-1">
+                          <MapPin size={12} className="text-blue-700 shrink-0" aria-hidden="true" />
+                          <span>{row.alamat_lokasi}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="text-xs sm:text-sm font-semibold text-slate-900">
+                        {formatDate(row.tanggal_mulai)}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        s.d. {formatDate(row.tanggal_selesai)}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {(row.jam_mulai || row.jam_selesai) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-slate-100 text-slate-800 border border-slate-300 tabular-nums">
+                            {row.jam_mulai || '-'} s.d. {row.jam_selesai || '-'}
                           </span>
-                          {activeTab === 'internal' && !isSuperAdmin && (
-                            <button onClick={openCreationModal} className="text-blue-500 text-sm hover:underline mt-1">
-                              Tambah kegiatan internal pertama
-                            </button>
-                          )}
-                        </div>
-                      </td></tr>
-                    );
-                  }
-                  return list.map((row, idx) => (
-                      <tr key={row.id || idx} className="hover:bg-blue-50/40 transition-colors">
-                        <td className="px-4 py-3.5 text-gray-400 text-xs">{idx + 1}</td>
-                        <td className="px-4 py-3.5">
-                          <span className="font-semibold text-gray-800 text-sm block">{row.nama_kegiatan}</span>
-                          {row.keterangan && <span className="text-[11px] text-gray-400 line-clamp-1">{row.keterangan}</span>}
-                          {row.alamat_lokasi && (
-                            <span className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                              <MapPin size={10} />{row.alamat_lokasi}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="text-sm text-gray-700">{formatDate(row.tanggal_mulai)}</div>
-                          <div className="text-[11px] text-gray-400">s/d {formatDate(row.tanggal_selesai)}</div>
-                          {(row.jam_mulai || row.jam_selesai) && (
-                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-600 ring-1 ring-sky-200">
-                              {row.jam_mulai || '—'} - {row.jam_selesai || '—'}
-                            </span>
-                          )}
-                          {row.radius_toleransi && (
-                            <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200">
-                              {row.radius_toleransi} m
-                            </span>
-                          )}
-                        </td>
-                        {/* OPD & Kehadiran */}
-                        <td className="px-4 py-3.5 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ring-1 ${
-                            row.is_global
-                              ? 'bg-purple-50 text-purple-700 ring-purple-200'
-                              : 'bg-amber-50 text-amber-600 ring-amber-200'
-                          }`}>
-                            <Building2 size={11} /> {row.is_global ? 'Semua OPD' : `${row.jumlah_opd_diundang ?? 0} OPD`}
+                        )}
+                        {row.radius_toleransi && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-300 tabular-nums">
+                            Radius {row.radius_toleransi} m
                           </span>
-                          <span className="block mt-1 text-[10px] text-green-600 font-semibold">
-                            <Users size={10} className="inline mr-0.5" />{row.jumlah_hadir ?? 0} Hadir
-                          </span>
-                        </td>
-                        {/* Aksi */}
-                        <td className="px-4 py-3.5 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {((activeTab === 'global' && isSuperAdmin) || (activeTab === 'internal' && !isSuperAdmin)) && (
-                              <button onClick={() => handleDelete(row.id, row.nama_kegiatan)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition ring-1 ring-red-200">
-                                <Trash2 size={13} /> Hapus
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                  ));
-                })()
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border ${
+                          row.is_global
+                            ? 'bg-blue-50 text-blue-800 border-blue-300'
+                            : 'bg-amber-50 text-amber-900 border-amber-300'
+                        }`}
+                      >
+                        <Building2 size={12} aria-hidden="true" />
+                        <span>
+                          {row.is_global ? 'Semua OPD' : `${row.jumlah_opd_diundang ?? 0} OPD`}
+                        </span>
+                      </span>
+                      <span className="block mt-1.5 text-xs text-emerald-800 font-bold tabular-nums">
+                        <Users size={12} className="inline mr-1" aria-hidden="true" />
+                        {row.jumlah_hadir ?? 0} Hadir
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <div className="flex items-center justify-center">
+                        {((activeTab === 'global' && isSuperAdmin) ||
+                          (activeTab === 'internal' && !isSuperAdmin)) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(row.id, row.nama_kegiatan)}
+                            aria-label={`Hapus kegiatan ${row.nama_kegiatan}`}
+                            className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3.5 py-2 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 active:bg-red-200 active:translate-y-px rounded-lg transition-all border border-red-300"
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════
-          CREATION MODAL (Global or Internal)
-         ══════════════════════════════════════════════ */}
+      {/* MODAL PEMBUATAN JADWAL KEGIATAN */}
       {showForm && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-slate-900/60 backdrop-blur-sm overflow-y-auto py-6 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-3xl overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white/95 backdrop-blur-md z-10">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2.5">
-                {isSuperAdmin
-                  ? <><div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><Globe size={18} /></div> Buat Kegiatan Global</>
-                  : <><div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><Building2 size={18} /></div> Buat Kegiatan Internal</>}
+        <div
+          className="fixed inset-0 z-[9999] flex items-start justify-center bg-slate-900/60 overflow-y-auto py-6 px-4"
+          onClick={resetForm}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-kegiatan-title"
+            className="surface-modal w-full max-w-3xl overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
+              <h2 id="modal-kegiatan-title" className="text-base font-extrabold flex items-center gap-2.5">
+                {isSuperAdmin ? (
+                  <>
+                    <Globe size={18} aria-hidden="true" />
+                    <span>Buat Kegiatan Global Lintas OPD</span>
+                  </>
+                ) : (
+                  <>
+                    <Building2 size={18} aria-hidden="true" />
+                    <span>Buat Kegiatan Internal OPD</span>
+                  </>
+                )}
               </h2>
-              <button onClick={resetForm} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                <X size={18} />
+              <button
+                type="button"
+                onClick={resetForm}
+                aria-label="Tutup formulir kegiatan"
+                className="gov-icon-btn text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* ── Basic Info ── */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">
-                  Nama Kegiatan <span className="text-red-500">*</span>
+                <label
+                  htmlFor="kegiatan-nama"
+                  className="block text-xs font-bold text-slate-800 mb-1.5"
+                >
+                  Nama Kegiatan <span className="text-red-700">*</span>
                 </label>
-                <input type="text" name="nama_kegiatan" value={formData.nama_kegiatan} onChange={handleInputChange}
-                  placeholder={isSuperAdmin ? "Contoh: Rapat Koordinasi Lintas OPD" : "Contoh: Rapat Internal Dinas"}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm text-slate-800 transition-all placeholder:text-slate-400" />
+                <input
+                  id="kegiatan-nama"
+                  type="text"
+                  name="nama_kegiatan"
+                  value={formData.nama_kegiatan}
+                  onChange={handleInputChange}
+                  placeholder={
+                    isSuperAdmin
+                      ? 'Contoh: Apel Gabungan ASN Pemerintah Daerah'
+                      : 'Contoh: Rapat Koordinasi Dinas'
+                  }
+                  className="gov-input"
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Keterangan</label>
-                <textarea name="keterangan" value={formData.keterangan} onChange={handleInputChange} rows={2}
-                  placeholder="Deskripsi singkat kegiatan..."
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm text-slate-800 transition-all placeholder:text-slate-400 resize-none" />
+                <label
+                  htmlFor="kegiatan-ket"
+                  className="block text-xs font-bold text-slate-800 mb-1.5"
+                >
+                  Keterangan Kegiatan
+                </label>
+                <textarea
+                  id="kegiatan-ket"
+                  name="keterangan"
+                  value={formData.keterangan}
+                  onChange={handleInputChange}
+                  rows={2}
+                  placeholder="Tuliskan deskripsi singkat atau instruksi pakaian dinas..."
+                  className="gov-input resize-none"
+                />
               </div>
 
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3.5">
+              {/* Tanggal (Responsif Mobile 1 Kolom -> Tablet 2 Kolom) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Tanggal Mulai <span className="text-red-500">*</span></label>
-                  <input type="date" name="tanggal_mulai" value={formData.tanggal_mulai} onChange={handleInputChange}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
+                  <label
+                    htmlFor="kegiatan-tgl-mulai"
+                    className="block text-xs font-bold text-slate-800 mb-1.5"
+                  >
+                    Tanggal Mulai <span className="text-red-700">*</span>
+                  </label>
+                  <input
+                    id="kegiatan-tgl-mulai"
+                    type="date"
+                    name="tanggal_mulai"
+                    value={formData.tanggal_mulai}
+                    onChange={handleInputChange}
+                    className="gov-input font-mono tabular-nums"
+                  />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Tanggal Selesai <span className="text-red-500">*</span></label>
-                  <input type="date" name="tanggal_selesai" value={formData.tanggal_selesai} onChange={handleInputChange}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
+                  <label
+                    htmlFor="kegiatan-tgl-selesai"
+                    className="block text-xs font-bold text-slate-800 mb-1.5"
+                  >
+                    Tanggal Selesai <span className="text-red-700">*</span>
+                  </label>
+                  <input
+                    id="kegiatan-tgl-selesai"
+                    type="date"
+                    name="tanggal_selesai"
+                    value={formData.tanggal_selesai}
+                    onChange={handleInputChange}
+                    className="gov-input font-mono tabular-nums"
+                  />
                 </div>
               </div>
 
-              {/* Time Boundaries */}
-              <div className="grid grid-cols-2 gap-3.5">
+              {/* Batas Jam */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Jam Mulai</label>
-                  <input type="time" name="jam_mulai" value={formData.jam_mulai} onChange={handleInputChange}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
+                  <label
+                    htmlFor="kegiatan-jam-mulai"
+                    className="block text-xs font-bold text-slate-800 mb-1.5"
+                  >
+                    Jam Mulai
+                  </label>
+                  <input
+                    id="kegiatan-jam-mulai"
+                    type="time"
+                    name="jam_mulai"
+                    value={formData.jam_mulai}
+                    onChange={handleInputChange}
+                    className="gov-input font-mono tabular-nums"
+                  />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wider">Jam Selesai</label>
-                  <input type="time" name="jam_selesai" value={formData.jam_selesai} onChange={handleInputChange}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs text-slate-700 transition-all" />
+                  <label
+                    htmlFor="kegiatan-jam-selesai"
+                    className="block text-xs font-bold text-slate-800 mb-1.5"
+                  >
+                    Jam Selesai
+                  </label>
+                  <input
+                    id="kegiatan-jam-selesai"
+                    type="time"
+                    name="jam_selesai"
+                    value={formData.jam_selesai}
+                    onChange={handleInputChange}
+                    className="gov-input font-mono tabular-nums"
+                  />
                 </div>
               </div>
 
-              {/* ══════════════════════════════
-                  SECTION A: GEOFENCING MAP (Compact & Proportional)
-                 ══════════════════════════════ */}
-              <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin size={14} /> Geofencing — Peta Lokasi
+              {/* Seksi A: Geofencing Peta Lokasi */}
+              <div className="bg-slate-50 border border-slate-300 rounded-xl p-4 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <p className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin size={15} className="text-blue-700" aria-hidden="true" />
+                    <span>Geofencing: Peta Lokasi Kegiatan</span>
                   </p>
-                  <span className="text-[10px] text-slate-400">Klik / geser pin untuk atur koordinat</span>
+                  <span className="text-xs text-slate-600">
+                    Klik pada peta atau geser pin untuk menentukan koordinat
+                  </span>
                 </div>
 
-                {/* Address + Geocode */}
-                <div className="flex gap-2">
-                  <input type="text" name="alamat_lokasi" value={formData.alamat_lokasi} onChange={handleInputChange}
-                    placeholder="Ketik alamat lokasi (contoh: Jl. Raya Serang, Cikupa)..."
-                    className="flex-1 px-3 py-2 bg-white border border-slate-200/80 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
-                  <button type="button" onClick={handleGeocode} disabled={isGeocoding}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-60 whitespace-nowrap">
-                    {isGeocoding ? <Loader2 size={13} className="animate-spin" /> : <Navigation size={13} />}
-                    Cari Alamat
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="flex-1">
+                    <label htmlFor="kegiatan-alamat" className="sr-only">
+                      Alamat Lokasi Kegiatan
+                    </label>
+                    <input
+                      id="kegiatan-alamat"
+                      type="text"
+                      name="alamat_lokasi"
+                      value={formData.alamat_lokasi}
+                      onChange={handleInputChange}
+                      placeholder="Ketik alamat lokasi (contoh: Pusat Pemerintahan Tigaraksa)..."
+                      className="gov-input"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGeocode}
+                    disabled={isGeocoding}
+                    className="gov-btn-primary text-xs shrink-0"
+                  >
+                    {isGeocoding ? (
+                      <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Navigation size={15} aria-hidden="true" />
+                    )}
+                    <span>Cari Alamat</span>
                   </button>
                 </div>
 
-                {/* Leaflet Map - Compact & Proportional */}
-                <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative z-0" style={{ height: 210 }}>
-                  <MapContainer center={mapPosition} zoom={15} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
+                <div
+                  className="rounded-lg overflow-hidden border border-slate-400 relative z-0"
+                  style={{ height: 220 }}
+                >
+                  <MapContainer
+                    center={mapPosition}
+                    zoom={15}
+                    scrollWheelZoom
+                    style={{ height: '100%', width: '100%' }}
+                  >
                     <TileLayer
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -574,166 +810,216 @@ const JadwalKegiatan = () => {
                   </MapContainer>
                 </div>
 
-                {/* Coordinate Inputs */}
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5 uppercase tracking-wider">Latitude</label>
-                    <input type="number" step="any" name="latitude_target" value={formData.latitude_target}
-                      onChange={handleNumberChange} placeholder="-6.175"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" />
+                    <label
+                      htmlFor="kegiatan-lat"
+                      className="block text-xs font-bold text-slate-800 mb-1"
+                    >
+                      Latitude
+                    </label>
+                    <input
+                      id="kegiatan-lat"
+                      type="number"
+                      step="any"
+                      name="latitude_target"
+                      value={formData.latitude_target}
+                      onChange={handleNumberChange}
+                      placeholder="-6.2088"
+                      className="gov-input font-mono text-xs tabular-nums"
+                    />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5 uppercase tracking-wider">Longitude</label>
-                    <input type="number" step="any" name="longitude_target" value={formData.longitude_target}
-                      onChange={handleNumberChange} placeholder="106.827"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" />
+                    <label
+                      htmlFor="kegiatan-lng"
+                      className="block text-xs font-bold text-slate-800 mb-1"
+                    >
+                      Longitude
+                    </label>
+                    <input
+                      id="kegiatan-lng"
+                      type="number"
+                      step="any"
+                      name="longitude_target"
+                      value={formData.longitude_target}
+                      onChange={handleNumberChange}
+                      placeholder="106.8456"
+                      className="gov-input font-mono text-xs tabular-nums"
+                    />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 mb-0.5 uppercase tracking-wider">Radius (meter)</label>
-                    <input type="number" name="radius_toleransi" value={formData.radius_toleransi}
-                      onChange={handleNumberChange} min={10}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" />
+                    <label
+                      htmlFor="kegiatan-radius"
+                      className="block text-xs font-bold text-slate-800 mb-1"
+                    >
+                      Radius Toleransi (meter)
+                    </label>
+                    <input
+                      id="kegiatan-radius"
+                      type="number"
+                      name="radius_toleransi"
+                      value={formData.radius_toleransi}
+                      onChange={handleNumberChange}
+                      min={10}
+                      className="gov-input font-mono text-xs tabular-nums"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* ══════════════════════════════════════
-                  SECTION B: OPD INVITATION & SELECTION
-                  (Only for Admin OPD creating Internal)
-                 ══════════════════════════════════════ */}
+              {/* Seksi B: Undangan OPD (Khusus Admin OPD) */}
               {!isSuperAdmin && (
-                <div className="space-y-2.5">
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Undangan OPD
-                  </label>
+                <div className="space-y-3">
+                  <p className="block text-xs font-bold text-slate-800">
+                    Cakupan Undangan Instansi OPD
+                  </p>
 
-                  {/* Modern Pill Sliding Segmented Control */}
-                  <div className="relative p-1 bg-slate-100 rounded-xl flex items-center border border-slate-200/80">
+                  <div className="p-1 bg-slate-100 rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-1 border border-slate-300">
                     <button
                       type="button"
+                      aria-pressed={isGlobalToggle}
                       onClick={() => setIsGlobalToggle(true)}
-                      className={`relative flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      className={`flex items-center justify-center gap-2 min-h-[44px] px-3 py-2 rounded-md text-xs font-bold transition-all active:translate-y-px ${
                         isGlobalToggle
-                          ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-900/5'
-                          : 'text-slate-500 hover:text-slate-800'
+                          ? 'bg-blue-700 text-white'
+                          : 'text-slate-700 hover:bg-slate-200'
                       }`}
                     >
-                      <Globe size={15} className={isGlobalToggle ? 'text-blue-600' : 'text-slate-400'} />
+                      <Globe size={15} aria-hidden="true" />
                       <span>Semua OPD (Global)</span>
                     </button>
                     <button
                       type="button"
+                      aria-pressed={!isGlobalToggle}
                       onClick={() => setIsGlobalToggle(false)}
-                      className={`relative flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      className={`flex items-center justify-center gap-2 min-h-[44px] px-3 py-2 rounded-md text-xs font-bold transition-all active:translate-y-px ${
                         !isGlobalToggle
-                          ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-900/5'
-                          : 'text-slate-500 hover:text-slate-800'
+                          ? 'bg-blue-700 text-white'
+                          : 'text-slate-700 hover:bg-slate-200'
                       }`}
                     >
-                      <Building2 size={15} className={!isGlobalToggle ? 'text-blue-600' : 'text-slate-400'} />
+                      <Building2 size={15} aria-hidden="true" />
                       <span>Pilih OPD Tertentu</span>
                       {!isGlobalToggle && selectedOpdIds.length > 0 && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded-full">
+                        <span className="px-1.5 py-0.5 text-[11px] font-mono font-bold bg-blue-900 text-white rounded tabular-nums">
                           {selectedOpdIds.length}
                         </span>
                       )}
                     </button>
                   </div>
 
-                  {/* OPD Checkbox List with Soft UI */}
                   {!isGlobalToggle && (
-                    <div className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-sm">
-                      <div className="p-3 bg-slate-50/80 border-b border-slate-200/60 space-y-2.5">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                          <input
-                            type="text"
-                            placeholder="Cari nama atau kode OPD..."
-                            value={opdSearch}
-                            onChange={e => setOpdSearch(e.target.value)}
-                            className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-200/80 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                          />
+                    <div className="border border-slate-300 rounded-xl overflow-hidden bg-white">
+                      <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2.5">
+                        <div>
+                          <label htmlFor="opd-invite-search" className="sr-only">
+                            Cari Nama atau Kode OPD
+                          </label>
+                          <div className="relative">
+                            <Search
+                              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+                              size={15}
+                              aria-hidden="true"
+                            />
+                            <input
+                              id="opd-invite-search"
+                              type="text"
+                              placeholder="Cari nama atau kode OPD..."
+                              value={opdSearch}
+                              onChange={(e) => setOpdSearch(e.target.value)}
+                              className="gov-input pl-9 text-xs"
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between px-0.5">
-                          <span className="text-[11px] text-slate-500">
-                            Terpilih: <span className="font-bold text-blue-600">{selectedOpdIds.length}</span> dari {filteredOpdList.length} OPD
+
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs text-slate-700 tabular-nums">
+                            Terpilih: <b className="text-blue-800">{selectedOpdIds.length}</b> dari{' '}
+                            {filteredOpdList.length} OPD
                           </span>
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setSelectedOpdIds(filteredOpdList.map(o => o.id))}
-                              className="text-[11px] text-blue-600 hover:text-blue-700 font-medium transition"
+                              onClick={() => setSelectedOpdIds(filteredOpdList.map((o) => o.id))}
+                              className="min-h-[44px] px-3 py-1.5 text-xs font-bold text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg transition-colors"
                             >
-                              Pilih semua
+                              Pilih Semua
                             </button>
-                            <span className="text-slate-300">|</span>
                             <button
                               type="button"
                               onClick={() => setSelectedOpdIds([])}
-                              className="text-[11px] text-slate-400 hover:text-red-500 font-medium transition"
+                              className="min-h-[44px] px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-400 rounded-lg transition-colors"
                             >
-                              Reset
+                              Reset Pilihan
                             </button>
                           </div>
                         </div>
                       </div>
 
-                      <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      <div className="p-2">
+                        <ErrorBanner message={opdError} onRetry={fetchOpdList} />
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto divide-y divide-slate-200">
                         {isLoadingOpd ? (
-                          <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400">
-                            <Loader2 size={20} className="animate-spin text-blue-500" />
-                            <span className="text-xs">Memuat daftar OPD...</span>
+                          <div
+                            className="flex flex-col items-center justify-center py-10 gap-2 text-slate-700"
+                            role="status"
+                          >
+                            <Loader2
+                              size={20}
+                              className="animate-spin text-blue-700"
+                              aria-hidden="true"
+                            />
+                            <span className="text-xs font-semibold">Memuat daftar OPD...</span>
                           </div>
                         ) : filteredOpdList.length > 0 ? (
-                          <table className="w-full text-xs border-collapse">
-                            <thead className="bg-slate-50/60 text-[10px] font-semibold text-slate-500 uppercase tracking-wider sticky top-0 backdrop-blur-sm z-10">
-                              <tr>
-                                <th className="px-3 py-2 w-10 text-center"></th>
-                                <th className="px-3 py-2 text-left">Nama OPD</th>
-                                <th className="px-3 py-2 text-left w-24">Kode</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {filteredOpdList.map(o => {
-                                const isSel = selectedOpdIds.includes(o.id);
-                                return (
-                                  <tr
-                                    key={o.id}
-                                    onClick={() => handleToggleOpd(o.id)}
-                                    className={`cursor-pointer transition-colors duration-150 ${
-                                      isSel ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-slate-50/70'
+                          filteredOpdList.map((o) => {
+                            const isSel = selectedOpdIds.includes(o.id);
+                            return (
+                              <label
+                                key={o.id}
+                                className={`flex items-center justify-between gap-3 min-h-[44px] px-3.5 py-2 transition-colors ${
+                                  isSel ? 'bg-blue-50' : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <span className="flex items-center gap-3 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSel}
+                                    onChange={() => handleToggleOpd(o.id)}
+                                    className="w-4 h-4 rounded accent-blue-700 shrink-0"
+                                  />
+                                  <span
+                                    className={`text-xs truncate ${
+                                      isSel
+                                        ? 'text-blue-950 font-bold'
+                                        : 'text-slate-800 font-medium'
                                     }`}
                                   >
-                                    <td className="px-3 py-2.5 text-center">
-                                      <div className={`w-4 h-4 rounded flex items-center justify-center mx-auto transition-all ${
-                                        isSel ? 'bg-blue-600 text-white' : 'border border-slate-300 bg-white'
-                                      }`}>
-                                        {isSel && <CheckSquare size={12} className="stroke-[3]" />}
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                      <span className={`font-medium ${isSel ? 'text-blue-900 font-semibold' : 'text-slate-700'}`}>
-                                        {o.nama_opd}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                      <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                        {o.kode_opd || '—'}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                    {o.nama_opd || o.nama}
+                                  </span>
+                                </span>
+                                <span className="font-mono text-[11px] text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded shrink-0">
+                                  {o.kode_opd || o.kode || '-'}
+                                </span>
+                              </label>
+                            );
+                          })
                         ) : (
                           <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
-                              <Building2 size={20} />
-                            </div>
-                            <p className="text-xs font-semibold text-slate-600">Tidak ada OPD ditemukan</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5 max-w-xs">
-                              {opdSearch ? `Tidak ada hasil pencarian untuk "${opdSearch}"` : 'Data OPD belum tersedia di sistem.'}
+                            <Building2
+                              size={22}
+                              className="text-slate-600 mb-2"
+                              aria-hidden="true"
+                            />
+                            <p className="text-xs font-bold text-slate-900">
+                              Instansi OPD Tidak Ditemukan
+                            </p>
+                            <p className="text-xs text-slate-600 mt-0.5">
+                              {opdSearch
+                                ? `Tidak ada hasil pencarian untuk "${opdSearch}".`
+                                : 'Data instansi OPD belum tersedia.'}
                             </p>
                           </div>
                         )}
@@ -741,16 +1027,17 @@ const JadwalKegiatan = () => {
                     </div>
                   )}
 
-                  {/* Global info */}
                   {isGlobalToggle && (
-                    <div className="bg-purple-50/80 border border-purple-200/80 rounded-xl p-3.5 flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                        <ShieldCheck size={18} />
+                    <div className="bg-blue-50 border border-blue-300 rounded-xl p-4 flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-100 border border-blue-200 text-blue-800 flex items-center justify-center shrink-0">
+                        <ShieldCheck size={18} aria-hidden="true" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-purple-900">Kegiatan Global (Seluruh OPD)</p>
-                        <p className="text-[11px] text-purple-700 mt-0.5 leading-relaxed">
-                          Semua ASN dari seluruh OPD terdaftar di sistem dapat melakukan presensi pada kegiatan ini.
+                        <p className="text-xs font-bold text-blue-950">
+                          Kegiatan Global (Seluruh OPD)
+                        </p>
+                        <p className="text-xs text-blue-900 mt-0.5 leading-relaxed">
+                          Seluruh personel ASN dan Non-ASN dari semua instansi OPD yang terdaftar dapat melakukan presensi pada kegiatan ini.
                         </p>
                       </div>
                     </div>
@@ -758,22 +1045,30 @@ const JadwalKegiatan = () => {
                 </div>
               )}
 
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button type="button" onClick={resetForm}
-                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all">
+              {/* Tombol Simpan / Batal */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
+                <button type="button" onClick={resetForm} className="gov-btn-secondary">
                   Batal
                 </button>
-                <button type="submit" disabled={isSubmitting}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-xl font-semibold transition-all shadow-sm hover:shadow active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait">
-                  {isSubmitting ? <><Loader2 size={14} className="animate-spin" /> Menyimpan...</> : <><Plus size={14} /> Simpan Kegiatan</>}
+                <button type="submit" disabled={isSubmitting} className="gov-btn-primary">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={15} aria-hidden="true" />
+                      <span>Simpan Kegiatan</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 };
 
