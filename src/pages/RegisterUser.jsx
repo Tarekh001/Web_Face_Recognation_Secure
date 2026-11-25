@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import * as faceapi from '@vladmandic/face-api';
 import axios from 'axios';
 import API_BASE from '../config/api';
+import { initFaceDetector, captureFaceBlobFromVideo } from '../utils/faceApiInit';
 import {
   CheckCircle2,
   Circle,
@@ -26,6 +26,8 @@ const RegisterUser = () => {
   const [opdError, setOpdError] = useState('');
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
   const [modelError, setModelError] = useState('');
+  const [cameraError, setCameraError] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [regMode, setRegMode] = useState('ASN'); // 'ASN' or 'NON_ASN'
 
@@ -62,63 +64,75 @@ const RegisterUser = () => {
     fetchOPD();
   }, [fetchOPD]);
 
+  const loadModels = useCallback(async () => {
+    setModelError('');
+    setIsModelsLoaded(false);
+    try {
+      await initFaceDetector();
+      setIsModelsLoaded(true);
+    } catch (error) {
+      console.error('Gagal memuat model deteksi wajah:', error);
+      setModelError(
+        error?.message ||
+          'Gagal memuat modul detektor wajah. Pastikan berkas model tersedia di folder /models.'
+      );
+    }
+  }, []);
+
   useEffect(() => {
-    const loadModels = async () => {
+    let active = true;
+    (async () => {
       try {
-        if (faceapi.tf) {
-          try {
-            await faceapi.tf.setBackend('webgl');
-            await faceapi.tf.ready();
-          } catch {
-            await faceapi.tf.setBackend('cpu');
-            await faceapi.tf.ready();
-          }
-        }
-        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-        setIsModelsLoaded(true);
+        await initFaceDetector();
+        if (active) setIsModelsLoaded(true);
       } catch (error) {
         console.error('Gagal memuat model deteksi wajah:', error);
-        setModelError('Gagal memuat modul detektor wajah. Pastikan berkas model tersedia di folder /models.');
+        if (active) {
+          setModelError(
+            error?.message ||
+              'Gagal memuat modul detektor wajah. Pastikan berkas model tersedia di folder /models.'
+          );
+        }
       }
+    })();
+    return () => {
+      active = false;
     };
-    loadModels();
   }, []);
 
   const captureAndCrop = async () => {
-    if (capturedPhotos.length >= 5) return;
+    if (isCapturing || capturedPhotos.length >= 5) return;
 
     const video = webcamRef.current?.video;
-    if (!video) return;
-    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
-
-    if (detection) {
-      const { x, y, width, height } = detection.box;
-      const canvas = document.createElement('canvas');
-
-      const size = Math.max(width, height);
-      const margin = size * 0.3;
-      const cropSize = size + margin * 2;
-      const cropX = Math.max(0, x + width / 2 - cropSize / 2);
-      const cropY = Math.max(0, y + height / 2 - cropSize / 2);
-
-      canvas.width = 160;
-      canvas.height = 160;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, 160, 160);
-
-      canvas.toBlob(
-        (blob) => {
-          setCapturedPhotos((prev) => [...prev, blob]);
-        },
-        'image/jpeg',
-        1.0
-      );
-    } else {
-      notifyAlert({
+    if (!video) {
+      return notifyAlert({
         icon: 'warning',
-        title: 'Wajah Belum Terdeteksi',
-        text: 'Pastikan wajah berada tepat di dalam bingkai oval dan pencahayaan ruangan memadai.',
+        title: 'Kamera Belum Siap',
+        text: 'Pastikan izin kamera sudah diberikan dan pratinjau video tampil sebelum mengambil foto.',
       });
+    }
+
+    setIsCapturing(true);
+    try {
+      const blob = await captureFaceBlobFromVideo(video);
+      if (blob) {
+        setCapturedPhotos((prev) => (prev.length < 5 ? [...prev, blob] : prev));
+      } else {
+        notifyAlert({
+          icon: 'warning',
+          title: 'Wajah Belum Terdeteksi',
+          text: 'Pastikan wajah berada tepat di dalam bingkai oval dan pencahayaan ruangan memadai.',
+        });
+      }
+    } catch (err) {
+      console.error('Gagal memproses tangkapan wajah:', err);
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Memproses Foto',
+        text: err?.message || 'Terjadi kendala saat mendeteksi wajah pada kamera.',
+      });
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -191,12 +205,12 @@ const RegisterUser = () => {
   return (
     <div className="space-y-5">
       {opdError && <ErrorBanner message={opdError} onRetry={fetchOPD} />}
-      {modelError && <ErrorBanner message={modelError} />}
+      {modelError && <ErrorBanner message={modelError} onRetry={loadModels} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
         {/* Kolom Formulir Identitas & Daftar 5 Pose */}
-        <div className="lg:col-span-5 flex flex-col gap-5">
-          <div className="surface-card p-6">
+        <div className="xl:col-span-5 flex flex-col gap-5 min-w-0">
+          <div className="surface-card p-5 sm:p-6">
             <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
                 <User size={16} />
@@ -206,7 +220,7 @@ const RegisterUser = () => {
 
             {/* Pemilih Kategori Pegawai */}
             <div
-              className="flex bg-slate-100 p-1 rounded-lg mb-4 border border-slate-300 gap-1"
+              className="flex flex-wrap sm:flex-nowrap bg-slate-100 p-1 rounded-lg mb-4 border border-slate-300 gap-1"
               role="group"
               aria-label="Pilih kategori pendaftaran pegawai"
             >
@@ -218,13 +232,13 @@ const RegisterUser = () => {
                   setFormData((p) => ({ ...p, nip: '' }));
                   setCapturedPhotos([]);
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 min-h-[44px] px-3 py-2 rounded-md text-xs font-bold transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-2 min-h-[44px] px-3 py-2 rounded-md text-xs font-bold text-center transition-colors ${
                   regMode === 'ASN'
                     ? 'bg-blue-700 text-white'
                     : 'text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                <CreditCard size={14} />
+                <CreditCard size={14} className="shrink-0" />
                 <span>ASN (NIP 18 Digit)</span>
               </button>
               <button
@@ -235,13 +249,13 @@ const RegisterUser = () => {
                   setFormData((p) => ({ ...p, nip: '' }));
                   setCapturedPhotos([]);
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 min-h-[44px] px-3 py-2 rounded-md text-xs font-bold transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-2 min-h-[44px] px-3 py-2 rounded-md text-xs font-bold text-center transition-colors ${
                   regMode === 'NON_ASN'
                     ? 'bg-blue-700 text-white'
                     : 'text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                <Users size={14} />
+                <Users size={14} className="shrink-0" />
                 <span>Non-ASN (NIK 16 Digit)</span>
               </button>
             </div>
@@ -399,15 +413,15 @@ const RegisterUser = () => {
         </div>
 
         {/* Kolom Pratinjau Kamera */}
-        <div className="lg:col-span-7">
-          <div className="surface-card p-5 sm:p-6 flex flex-col items-center">
+        <div className="xl:col-span-7 min-w-0">
+          <div className="surface-card p-4 sm:p-6 flex flex-col items-center">
             <div className="w-full max-w-xl bg-slate-900 text-white p-4 rounded-t-lg text-center border border-slate-800">
               {currentPoseIndex < 5 ? (
                 <>
                   <p className="text-slate-300 text-xs font-bold uppercase tracking-wider mb-1 tabular-nums">
                     Instruksi Pose {currentPoseIndex + 1} dari 5
                   </p>
-                  <h3 className="text-lg sm:text-xl font-extrabold text-amber-300">
+                  <h3 className="text-base sm:text-xl font-extrabold text-amber-300">
                     {requiredPoses[currentPoseIndex]}
                   </h3>
                 </>
@@ -418,18 +432,35 @@ const RegisterUser = () => {
               )}
             </div>
 
-            <div className="relative w-full max-w-xl bg-slate-950 rounded-b-lg overflow-hidden flex justify-center border-x border-b border-slate-800">
-              <Webcam
-                ref={webcamRef}
-                screenshotFormat="image/jpeg"
-                videoConstraints={{ facingMode: 'user' }}
-                className={`w-full h-auto object-cover transform scale-x-[-1] ${
-                  currentPoseIndex >= 5 ? 'opacity-50' : ''
-                }`}
-              />
+            <div className="relative w-full max-w-xl min-h-[260px] aspect-[4/3] bg-slate-950 rounded-b-lg overflow-hidden flex items-center justify-center border-x border-b border-slate-800">
+              {cameraError ? (
+                <div className="p-6 text-center max-w-sm space-y-2">
+                  <AlertCircle size={32} className="mx-auto text-amber-400" />
+                  <p className="text-sm font-bold text-white">Kamera Tidak Dapat Diakses</p>
+                  <p className="text-xs text-slate-300 leading-relaxed">{cameraError}</p>
+                </div>
+              ) : (
+                <>
+                  <Webcam
+                    ref={webcamRef}
+                    screenshotFormat="image/jpeg"
+                    videoConstraints={{ facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }}
+                    onUserMedia={() => setCameraError('')}
+                    onUserMediaError={(err) => {
+                      console.error('Webcam error:', err);
+                      setCameraError(
+                        'Gagal mengakses kamera perangkat. Pastikan izin kamera aktif dan akses web melalui HTTPS atau localhost.'
+                      );
+                    }}
+                    className={`w-full h-full object-cover transform scale-x-[-1] ${
+                      currentPoseIndex >= 5 ? 'opacity-50' : ''
+                    }`}
+                  />
 
-              {currentPoseIndex < 5 && (
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-44 h-60 md:w-52 md:h-68 border-4 border-dashed border-amber-300 rounded-[50%] pointer-events-none shadow-[0_0_0_9999px_rgba(15,23,42,0.45)]" />
+                  {currentPoseIndex < 5 && (
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[42%] max-w-[210px] aspect-[3/4] border-4 border-dashed border-amber-300 rounded-[50%] pointer-events-none shadow-[0_0_0_9999px_rgba(15,23,42,0.45)]" />
+                  )}
+                </>
               )}
             </div>
 
@@ -437,28 +468,61 @@ const RegisterUser = () => {
               <div className="flex items-center gap-2 text-xs font-bold" role="status">
                 <span
                   className={`w-2.5 h-2.5 rounded-full ${
-                    isModelsLoaded ? 'bg-emerald-600' : 'bg-amber-600'
+                    modelError
+                      ? 'bg-red-600'
+                      : isModelsLoaded
+                        ? 'bg-emerald-600'
+                        : 'bg-amber-600'
                   }`}
                 />
-                <span className={isModelsLoaded ? 'text-emerald-800' : 'text-slate-700'}>
-                  {isModelsLoaded
-                    ? 'Detektor Wajah Siap Memindai'
-                    : 'Memuat modul detektor wajah...'}
+                <span
+                  className={
+                    modelError
+                      ? 'text-red-700'
+                      : isModelsLoaded
+                        ? 'text-emerald-800'
+                        : 'text-slate-700'
+                  }
+                >
+                  {modelError
+                    ? 'Detektor wajah gagal dimuat'
+                    : isModelsLoaded
+                      ? 'Detektor Wajah Siap Memindai'
+                      : 'Memuat modul detektor wajah...'}
                 </span>
               </div>
 
               <button
                 type="button"
                 onClick={captureAndCrop}
-                disabled={!isModelsLoaded || currentPoseIndex >= 5 || !isIdentityReady}
+                disabled={
+                  !isModelsLoaded ||
+                  currentPoseIndex >= 5 ||
+                  !isIdentityReady ||
+                  isCapturing ||
+                  Boolean(cameraError)
+                }
                 className={`w-full sm:w-auto min-h-[48px] px-8 py-3 rounded-lg font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 tabular-nums ${
-                  !isModelsLoaded || currentPoseIndex >= 5 || !isIdentityReady
+                  !isModelsLoaded ||
+                  currentPoseIndex >= 5 ||
+                  !isIdentityReady ||
+                  isCapturing ||
+                  Boolean(cameraError)
                     ? 'bg-slate-200 text-slate-600 border border-slate-300'
                     : 'bg-blue-700 hover:bg-blue-800 text-white'
                 }`}
               >
-                <Camera size={18} />
-                <span>Ambil Foto Pose {currentPoseIndex < 5 ? currentPoseIndex + 1 : 5} / 5</span>
+                {isCapturing ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Memproses Wajah...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera size={18} />
+                    <span>Ambil Foto Pose {currentPoseIndex < 5 ? currentPoseIndex + 1 : 5} / 5</span>
+                  </>
+                )}
               </button>
 
               {!isIdentityReady && currentPoseIndex < 5 && (

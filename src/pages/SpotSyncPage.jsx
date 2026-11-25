@@ -425,7 +425,7 @@ const SpotSyncPage = () => {
       </div>
 
       {/* 4 Kartu Metrik Interaktif */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
         {/* Kartu 1 (Anchor): Total Log ASN */}
         <button
           type="button"
@@ -873,7 +873,7 @@ const SpotSyncPage = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
               <input
                 type="date"
                 aria-label="Tanggal mulai"
@@ -882,9 +882,9 @@ const SpotSyncPage = () => {
                   setStartDate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="gov-input text-xs w-36"
+                className="gov-input text-xs w-full sm:w-40"
               />
-              <span className="text-xs text-slate-600 font-semibold">s.d.</span>
+              <span className="text-xs text-slate-600 font-semibold shrink-0">s.d.</span>
               <input
                 type="date"
                 aria-label="Tanggal akhir"
@@ -893,7 +893,7 @@ const SpotSyncPage = () => {
                   setEndDate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="gov-input text-xs w-36"
+                className="gov-input text-xs w-full sm:w-40"
               />
             </div>
 

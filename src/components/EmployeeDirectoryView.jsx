@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef, useMemo, useCallback, useId } from 'react';
 import axios from 'axios';
 import Webcam from 'react-webcam';
-import * as faceapi from '@vladmandic/face-api';
 import API_BASE from '../config/api';
+import { initFaceDetector, captureFaceBlobFromVideo } from '../utils/faceApiInit';
 import {
   Users,
   UserCheck,
@@ -51,6 +51,9 @@ const EditEmployeeModal = ({ user, opdList, idLabel, modalTitle, onClose, onSave
   const [reRegisterFace, setReRegisterFace] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState([]);
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
+  const [modelError, setModelError] = useState('');
+  const [cameraError, setCameraError] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const requiredPoses = [
     'Wajah Lurus & Netral',
@@ -63,60 +66,60 @@ const EditEmployeeModal = ({ user, opdList, idLabel, modalTitle, onClose, onSave
   useModalEscape(true, onClose);
 
   useEffect(() => {
-    if (reRegisterFace) {
-      (async () => {
-        try {
-          if (faceapi.tf) {
-            try {
-              await faceapi.tf.setBackend('webgl');
-              await faceapi.tf.ready();
-            } catch {
-              await faceapi.tf.setBackend('cpu');
-              await faceapi.tf.ready();
-            }
-          }
-          await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-          setIsModelsLoaded(true);
-        } catch (err) {
-          console.error('Gagal memuat model deteksi wajah:', err);
+    if (!reRegisterFace) return undefined;
+    let active = true;
+    setModelError('');
+    setCameraError('');
+    setIsModelsLoaded(false);
+    (async () => {
+      try {
+        await initFaceDetector();
+        if (active) setIsModelsLoaded(true);
+      } catch (err) {
+        console.error('Gagal memuat model deteksi wajah:', err);
+        if (active) {
+          setModelError(
+            err?.message || 'Gagal memuat modul detektor wajah. Pastikan berkas model tersedia.'
+          );
         }
-      })();
-    }
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [reRegisterFace]);
 
   const captureAndCrop = async () => {
-    if (capturedPhotos.length >= 5) return;
+    if (isCapturing || capturedPhotos.length >= 5) return;
     const video = webcamRef.current?.video;
-    if (!video) return;
-    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
-    if (detection) {
-      const { x, y, width, height } = detection.box;
-      const canvas = document.createElement('canvas');
-      const size = Math.max(width, height);
-      const margin = size * 0.3;
-      const cropSize = size + margin * 2;
-      canvas.width = 160;
-      canvas.height = 160;
-      canvas
-        .getContext('2d')
-        .drawImage(
-          video,
-          Math.max(0, x + width / 2 - cropSize / 2),
-          Math.max(0, y + height / 2 - cropSize / 2),
-          cropSize,
-          cropSize,
-          0,
-          0,
-          160,
-          160
-        );
-      canvas.toBlob((blob) => setCapturedPhotos((prev) => [...prev, blob]), 'image/jpeg', 1.0);
-    } else {
-      notifyAlert({
+    if (!video) {
+      return notifyAlert({
         icon: 'warning',
-        title: 'Wajah Tidak Terdeteksi',
-        text: 'Pastikan wajah berada di dalam bingkai oval dan pencahayaan cukup.',
+        title: 'Kamera Belum Siap',
+        text: 'Pastikan izin kamera sudah diberikan sebelum mengambil foto wajah.',
       });
+    }
+    setIsCapturing(true);
+    try {
+      const blob = await captureFaceBlobFromVideo(video);
+      if (blob) {
+        setCapturedPhotos((prev) => (prev.length < 5 ? [...prev, blob] : prev));
+      } else {
+        notifyAlert({
+          icon: 'warning',
+          title: 'Wajah Tidak Terdeteksi',
+          text: 'Pastikan wajah berada di dalam bingkai oval dan pencahayaan cukup.',
+        });
+      }
+    } catch (err) {
+      console.error('Gagal memproses tangkapan wajah:', err);
+      notifyAlert({
+        icon: 'error',
+        title: 'Gagal Memproses Foto',
+        text: err?.message || 'Terjadi kendala saat mendeteksi wajah pada kamera.',
+      });
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -271,6 +274,11 @@ const EditEmployeeModal = ({ user, opdList, idLabel, modalTitle, onClose, onSave
 
           {reRegisterFace && (
             <div className="flex flex-col gap-3">
+              {modelError && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-300 text-xs font-semibold text-red-800">
+                  {modelError}
+                </div>
+              )}
               <div className="bg-slate-900 text-white p-3 rounded-t-lg text-center">
                 {idx < 5 ? (
                   <>
@@ -281,29 +289,53 @@ const EditEmployeeModal = ({ user, opdList, idLabel, modalTitle, onClose, onSave
                   <h3 className="text-base font-bold text-emerald-300">5 Pose Selesai Direkam</h3>
                 )}
               </div>
-              <div className="relative bg-slate-950 rounded-b-lg overflow-hidden border border-slate-800">
-                <Webcam
-                  ref={webcamRef}
-                  screenshotFormat="image/jpeg"
-                  videoConstraints={{ facingMode: 'user' }}
-                  className={`w-full transform scale-x-[-1] ${idx >= 5 ? 'opacity-50' : ''}`}
-                />
-                {idx < 5 && (
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-48 border-4 border-dashed border-amber-300 rounded-[50%] pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
+              <div className="relative min-h-[220px] aspect-[4/3] bg-slate-950 rounded-b-lg overflow-hidden border border-slate-800 flex items-center justify-center">
+                {cameraError ? (
+                  <p className="p-4 text-center text-xs text-slate-200 leading-relaxed">{cameraError}</p>
+                ) : (
+                  <>
+                    <Webcam
+                      ref={webcamRef}
+                      screenshotFormat="image/jpeg"
+                      videoConstraints={{ facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }}
+                      onUserMedia={() => setCameraError('')}
+                      onUserMediaError={(err) => {
+                        console.error('Webcam error:', err);
+                        setCameraError(
+                          'Kamera tidak dapat diakses. Pastikan izin kamera aktif dan dibuka via HTTPS atau localhost.'
+                        );
+                      }}
+                      className={`w-full h-full object-cover transform scale-x-[-1] ${
+                        idx >= 5 ? 'opacity-50' : ''
+                      }`}
+                    />
+                    {idx < 5 && (
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[42%] max-w-[190px] aspect-[3/4] border-4 border-dashed border-amber-300 rounded-[50%] pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
+                    )}
+                  </>
                 )}
               </div>
               <button
                 type="button"
                 onClick={captureAndCrop}
-                disabled={!isModelsLoaded || idx >= 5}
+                disabled={!isModelsLoaded || idx >= 5 || isCapturing || Boolean(cameraError)}
                 className={`min-h-[44px] py-2.5 px-4 rounded-lg font-bold text-sm inline-flex items-center justify-center gap-2 tabular-nums ${
-                  !isModelsLoaded || idx >= 5
+                  !isModelsLoaded || idx >= 5 || isCapturing || Boolean(cameraError)
                     ? 'bg-slate-200 text-slate-600 border border-slate-300'
                     : 'bg-blue-700 hover:bg-blue-800 text-white'
                 }`}
               >
-                <Camera size={16} />
-                <span>Ambil Foto Pose {Math.min(idx + 1, 5)} / 5</span>
+                {isCapturing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Memproses Wajah...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera size={16} />
+                    <span>Ambil Foto Pose {Math.min(idx + 1, 5)} / 5</span>
+                  </>
+                )}
               </button>
             </div>
           )}
@@ -546,7 +578,7 @@ const EmployeeDirectoryView = ({
   return (
     <div className="space-y-5">
       {/* Kartu Ringkasan Status Harian */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <button
           type="button"
           aria-pressed={statusFilter === ''}
@@ -687,7 +719,7 @@ const EmployeeDirectoryView = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="gov-table">
+          <table className="gov-table min-w-[860px]">
             <thead>
               <tr>
                 <th scope="col" className="w-14 text-center">No</th>

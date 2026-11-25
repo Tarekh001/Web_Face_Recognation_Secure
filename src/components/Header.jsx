@@ -78,7 +78,7 @@ const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen, onLogout }) => {
     <header className="sticky top-0 z-30 w-full bg-white border-b border-[#DCE3EC] shadow-soft-xs">
       <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
         {/* Kiri: Tombol Menu Mobile berlabel, Toggle Sidebar Desktop, & Judul Halaman */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setIsMobileOpen(true)}
@@ -156,8 +156,11 @@ const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen, onLogout }) => {
             <div className="w-7 h-7 rounded-md bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 shrink-0">
               <UserCircle size={18} aria-hidden="true" />
             </div>
-            <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-bold text-slate-900 leading-tight max-w-[130px] truncate tabular-nums">
+            <div className="hidden sm:flex flex-col text-left min-w-0">
+              <span
+                title={userNip}
+                className="text-xs font-bold text-slate-900 leading-tight max-w-[140px] xl:max-w-[220px] truncate tabular-nums"
+              >
                 {userNip}
               </span>
               <div className="flex items-center gap-1 mt-0.5">

@@ -1,8 +1,8 @@
 // src/config/api.js
 // Satu tempat untuk konfigurasi URL API.
-// Di development: pakai nilai dari .env (http://127.0.0.1:5000/api)
-// Di production build: pakai nilai dari .env.production (http://IP_SERVER:5000/api)
+// Default '/api' agar otomatis mengikuti domain/host yang dibuka (via Vite proxy / Nginx)
+// dan tetap bisa di-override via VITE_API_BASE di .env atau .env.production jika backend beda host.
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:5000/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 export default API_BASE;
