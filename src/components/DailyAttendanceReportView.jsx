@@ -369,14 +369,6 @@ const DailyAttendanceReportView = ({
         : totalSubtextDefault
     : totalSubtextDefault;
 
-  const gridColsClass = !fixedRole
-    ? isSuperAdmin
-      ? 'xl:grid-cols-6'
-      : 'xl:grid-cols-5'
-    : isSuperAdmin
-      ? 'lg:grid-cols-5'
-      : 'lg:grid-cols-4';
-
   return (
     <div className="space-y-5">
       <AttendanceMetricCards
@@ -388,189 +380,194 @@ const DailyAttendanceReportView = ({
       />
 
       {/* Bilah Filter & Aksi */}
-      <div className="surface-panel p-5">
+      <div className="surface-panel p-4 sm:p-5">
         <DatePresetBar startDate={startDate} endDate={endDate} onSelectRange={handleSelectDateRange} />
 
-        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
-          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${gridColsClass} gap-3 flex-1`}>
-            {/* Pencarian */}
-            <div>
-              <label
-                htmlFor={`${uid}-search`}
-                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
-              >
-                {searchLabel}
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
-                <input
-                  id={`${uid}-search`}
-                  type="text"
-                  placeholder={searchPlaceholder}
-                  value={searchQuery}
-                  onChange={handleFilterChange(setSearchQuery)}
-                  className="gov-input pl-9 pr-3"
-                />
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 items-end">
+          {/* Pencarian */}
+          <div className="min-w-0 sm:col-span-2">
+            <label
+              htmlFor={`${uid}-search`}
+              className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+            >
+              {searchLabel}
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+              <input
+                id={`${uid}-search`}
+                type="text"
+                placeholder={searchPlaceholder}
+                value={searchQuery}
+                onChange={handleFilterChange(setSearchQuery)}
+                className="gov-input pl-9 pr-3"
+              />
             </div>
+          </div>
 
-            {/* Tanggal Awal */}
-            <div>
-              <label
-                htmlFor={`${uid}-start-date`}
-                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
-              >
-                Dari Tanggal
-              </label>
-              <div className="relative">
-                <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
-                <input
-                  id={`${uid}-start-date`}
-                  type="date"
-                  value={startDate}
-                  onChange={handleFilterChange(setStartDate)}
-                  className="gov-input pl-9 pr-3 tabular-nums"
-                />
-              </div>
+          {/* Tanggal Awal */}
+          <div className="min-w-0">
+            <label
+              htmlFor={`${uid}-start-date`}
+              className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+            >
+              Dari Tanggal
+            </label>
+            <div className="relative">
+              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+              <input
+                id={`${uid}-start-date`}
+                type="date"
+                value={startDate}
+                onChange={handleFilterChange(setStartDate)}
+                className="gov-input pl-9 pr-3 tabular-nums"
+              />
             </div>
+          </div>
 
-            {/* Tanggal Akhir */}
-            <div>
-              <label
-                htmlFor={`${uid}-end-date`}
-                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
-              >
-                Sampai Tanggal
-              </label>
-              <div className="relative">
-                <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
-                <input
-                  id={`${uid}-end-date`}
-                  type="date"
-                  value={endDate}
-                  onChange={handleFilterChange(setEndDate)}
-                  className="gov-input pl-9 pr-3 tabular-nums"
-                />
-              </div>
+          {/* Tanggal Akhir */}
+          <div className="min-w-0">
+            <label
+              htmlFor={`${uid}-end-date`}
+              className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+            >
+              Sampai Tanggal
+            </label>
+            <div className="relative">
+              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+              <input
+                id={`${uid}-end-date`}
+                type="date"
+                value={endDate}
+                onChange={handleFilterChange(setEndDate)}
+                className="gov-input pl-9 pr-3 tabular-nums"
+              />
             </div>
+          </div>
 
-            {/* Status Kehadiran */}
-            <div>
-              <label
-                htmlFor={`${uid}-status`}
-                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
+          {/* Status Kehadiran */}
+          <div className="min-w-0">
+            <label
+              htmlFor={`${uid}-status`}
+              className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+            >
+              Status Kehadiran
+            </label>
+            <div className="relative">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+              <select
+                id={`${uid}-status`}
+                value={statusFilter}
+                onChange={handleFilterChange(setStatusFilter)}
+                className="gov-select pl-9 pr-8 appearance-none"
               >
-                Status Kehadiran
+                <option value="">Semua Status</option>
+                <option value="ON_TIME">Tepat Waktu</option>
+                <option value="LATE">Terlambat</option>
+                <option value="ABSENT">Belum / Tidak Hadir</option>
+              </select>
+              <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 rotate-90 pointer-events-none" size={15} />
+            </div>
+          </div>
+
+          {/* Tipe Pegawai (Khusus Dashboard Gabungan) */}
+          {!fixedRole && (
+            <div className="min-w-0">
+              <label
+                htmlFor={`${uid}-role`}
+                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+              >
+                Tipe Pegawai
               </label>
               <div className="relative">
-                <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+                <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
                 <select
-                  id={`${uid}-status`}
-                  value={statusFilter}
-                  onChange={handleFilterChange(setStatusFilter)}
+                  id={`${uid}-role`}
+                  value={roleFilter}
+                  onChange={handleFilterChange(setRoleFilter)}
                   className="gov-select pl-9 pr-8 appearance-none"
                 >
-                  <option value="">Semua Status</option>
-                  <option value="ON_TIME">Tepat Waktu</option>
-                  <option value="LATE">Terlambat</option>
-                  <option value="ABSENT">Belum / Tidak Hadir</option>
+                  <option value="">Semua Pegawai</option>
+                  <option value="asn">ASN (Termasuk Admin)</option>
+                  <option value="non_asn">Non-ASN</option>
                 </select>
                 <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 rotate-90 pointer-events-none" size={15} />
               </div>
             </div>
+          )}
 
-            {/* Tipe Pegawai (Khusus Dashboard Gabungan) */}
-            {!fixedRole && (
-              <div>
-                <label
-                  htmlFor={`${uid}-role`}
-                  className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
-                >
-                  Tipe Pegawai
-                </label>
-                <div className="relative">
-                  <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
-                  <select
-                    id={`${uid}-role`}
-                    value={roleFilter}
-                    onChange={handleFilterChange(setRoleFilter)}
-                    className="gov-select pl-9 pr-8 appearance-none"
-                  >
-                    <option value="">Semua Pegawai</option>
-                    <option value="asn">ASN (Termasuk Admin)</option>
-                    <option value="non_asn">Non-ASN</option>
-                  </select>
-                  <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 rotate-90 pointer-events-none" size={15} />
-                </div>
-              </div>
-            )}
-
-            {/* Shift Jam Kerja */}
-            <div>
-              <label
-                htmlFor={`${uid}-shift`}
-                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
+          {/* Shift Jam Kerja */}
+          <div className="min-w-0">
+            <label
+              htmlFor={`${uid}-shift`}
+              className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+            >
+              Shift Jam Kerja
+            </label>
+            <div className="relative">
+              <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+              <select
+                id={`${uid}-shift`}
+                value={selectedShiftId}
+                onChange={handleFilterChange(setSelectedShiftId)}
+                className="gov-select pl-9 pr-8 appearance-none"
               >
-                Shift Jam Kerja
+                <option value="">Semua Shift</option>
+                {shiftList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nama_shift}
+                  </option>
+                ))}
+              </select>
+              <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 rotate-90 pointer-events-none" size={15} />
+            </div>
+          </div>
+
+          {/* Filter OPD (Super Admin) */}
+          {isSuperAdmin && (
+            <div className="min-w-0">
+              <label
+                htmlFor={`${uid}-opd`}
+                className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider whitespace-nowrap truncate"
+              >
+                Instansi OPD
               </label>
               <div className="relative">
-                <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
+                <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
                 <select
-                  id={`${uid}-shift`}
-                  value={selectedShiftId}
-                  onChange={handleFilterChange(setSelectedShiftId)}
+                  id={`${uid}-opd`}
+                  value={selectedOpdId}
+                  onChange={handleFilterChange(setSelectedOpdId)}
                   className="gov-select pl-9 pr-8 appearance-none"
                 >
-                  <option value="">Semua Shift</option>
-                  {shiftList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nama_shift}
+                  <option value="">Seluruh Instansi</option>
+                  {opdList.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.nama || o.nama_opd}
                     </option>
                   ))}
                 </select>
                 <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 rotate-90 pointer-events-none" size={15} />
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Filter OPD (Super Admin) */}
-            {isSuperAdmin && (
-              <div>
-                <label
-                  htmlFor={`${uid}-opd`}
-                  className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
-                >
-                  Instansi OPD
-                </label>
-                <div className="relative">
-                  <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={15} />
-                  <select
-                    id={`${uid}-opd`}
-                    value={selectedOpdId}
-                    onChange={handleFilterChange(setSelectedOpdId)}
-                    className="gov-select pl-9 pr-8 appearance-none"
-                  >
-                    <option value="">Seluruh Instansi</option>
-                    {opdList.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.nama || o.nama_opd}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 rotate-90 pointer-events-none" size={15} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Tombol Aksi Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-1 xl:pt-0">
+        {/* Tombol Aksi Toolbar */}
+        <div className="mt-4 pt-3.5 border-t border-[#DCE3EC] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold text-slate-600 tabular-nums">
+              Menampilkan <b className="text-slate-900">{totalItems.toLocaleString('id-ID')}</b> {dataUnitLabel}
+            </span>
             {hasActiveFilters && (
               <button type="button" onClick={handleResetFilters} className="gov-btn-secondary">
                 <RotateCcw size={15} />
                 <span>Atur Ulang Filter</span>
               </button>
             )}
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {showKegiatanShortcut && (
               <Link
                 to="/laporan-kegiatan"
@@ -607,7 +604,7 @@ const DailyAttendanceReportView = ({
       {/* Tabel Data Presensi */}
       <div className="surface-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="gov-table">
+          <table className="gov-table min-w-[980px]">
             <thead>
               <tr>
                 <th scope="col" className="w-14 text-center">No</th>

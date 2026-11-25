@@ -23,6 +23,114 @@ import {
 import logoKab from '../assets/Kab_Tangerang.png';
 import { useModalEscape } from './UiFeedback';
 
+const NavItem = ({ to, icon, label, badge, nested = false, active, isCollapsed, isMobileOpen }) => {
+  const Icon = icon;
+  return (
+    <Link
+      to={to}
+      title={isCollapsed ? label : undefined}
+      aria-current={active ? 'page' : undefined}
+      className={`group relative flex items-center ${
+        nested ? 'gap-2 px-2.5 py-2' : 'gap-3 px-3.5 py-2.5'
+      } min-h-[44px] rounded-xl text-[13px] transition-all duration-150 ${
+        active
+          ? 'bg-blue-700 text-white font-bold shadow-btn-primary'
+          : 'text-slate-300 font-medium hover:bg-white/[0.06] hover:text-white'
+      } ${isCollapsed && !isMobileOpen ? 'justify-center px-2.5' : ''}`}
+    >
+      <Icon
+        size={18}
+        aria-hidden="true"
+        className={`shrink-0 transition-colors ${
+          active ? 'text-white' : 'text-slate-400 group-hover:text-white'
+        }`}
+      />
+
+      {(!isCollapsed || isMobileOpen) && (
+        <div className="flex-1 min-w-0 flex items-center justify-between gap-1.5">
+          <span className="truncate">{label}</span>
+          {badge && (
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide shrink-0 whitespace-nowrap ${
+                active
+                  ? 'bg-blue-900/80 text-white border border-blue-400/50'
+                  : badge === 'ASN'
+                    ? 'bg-slate-800/90 text-blue-200 border border-slate-700'
+                    : 'bg-slate-800/90 text-amber-200 border border-slate-700'
+              }`}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
+  );
+};
+
+const NavDropdown = ({
+  label,
+  icon,
+  isOpen,
+  toggleOpen,
+  children,
+  isActive,
+  isCollapsed,
+  isMobileOpen,
+  setIsCollapsed,
+}) => {
+  const Icon = icon;
+  const handleClick = () => {
+    if (isCollapsed && !isMobileOpen && setIsCollapsed) {
+      setIsCollapsed(false);
+      if (!isOpen) toggleOpen();
+      return;
+    }
+    toggleOpen();
+  };
+  return (
+    <div className="flex flex-col space-y-1">
+      <button
+        type="button"
+        onClick={handleClick}
+        aria-expanded={isOpen}
+        title={isCollapsed ? label : undefined}
+        className={`group flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-xl text-[13px] transition-all duration-150 w-full ${
+          isActive && !isOpen
+            ? 'bg-white/[0.08] text-white font-bold border border-white/10'
+            : 'text-slate-300 font-medium hover:bg-white/[0.06] hover:text-white'
+        } ${isCollapsed && !isMobileOpen ? 'justify-center px-2.5' : ''}`}
+      >
+        <div className="flex items-center gap-3 truncate">
+          <Icon
+            size={18}
+            aria-hidden="true"
+            className={`shrink-0 transition-colors ${
+              isActive ? 'text-sky-300' : 'text-slate-400 group-hover:text-white'
+            }`}
+          />
+          {(!isCollapsed || isMobileOpen) && <span className="truncate">{label}</span>}
+        </div>
+        {(!isCollapsed || isMobileOpen) && (
+          <ChevronDown
+            size={16}
+            aria-hidden="true"
+            className={`text-slate-400 transition-transform duration-200 shrink-0 ${
+              isOpen ? 'rotate-180 text-white' : ''
+            }`}
+          />
+        )}
+      </button>
+
+      {isOpen && (!isCollapsed || isMobileOpen) && (
+        <div className="pl-2 pr-0 flex flex-col space-y-1 mt-1 border-l border-slate-700/80 ml-3.5 py-0.5">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, onLogout }) => {
   const location = useLocation();
 
@@ -48,101 +156,6 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
 
   const userRole = localStorage.getItem('user_role');
   const isActiveRoute = (path) => location.pathname === path;
-
-  const NavItem = ({ to, icon: Icon, label, badge }) => {
-    const active = isActiveRoute(to);
-    return (
-      <Link
-        to={to}
-        title={isCollapsed ? label : undefined}
-        aria-current={active ? 'page' : undefined}
-        className={`group relative flex items-center gap-3 min-h-[44px] px-3.5 py-2.5 rounded-xl text-[13px] transition-all duration-150 ${
-          active
-            ? 'bg-blue-700 text-white font-bold shadow-btn-primary'
-            : 'text-slate-300 font-medium hover:bg-white/[0.06] hover:text-white'
-        } ${isCollapsed && !isMobileOpen ? 'justify-center px-2.5' : ''}`}
-      >
-        <Icon
-          size={18}
-          aria-hidden="true"
-          className={`shrink-0 transition-colors ${
-            active ? 'text-white' : 'text-slate-400 group-hover:text-white'
-          }`}
-        />
-
-        {(!isCollapsed || isMobileOpen) && (
-          <div className="flex-1 flex items-center justify-between gap-2 truncate">
-            <span className="truncate">{label}</span>
-            {badge && (
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${
-                  active
-                    ? 'bg-blue-900/80 text-white border border-blue-400/50'
-                    : badge === 'ASN'
-                      ? 'bg-slate-800/90 text-blue-200 border border-slate-700'
-                      : 'bg-slate-800/90 text-amber-200 border border-slate-700'
-                }`}
-              >
-                {badge}
-              </span>
-            )}
-          </div>
-        )}
-      </Link>
-    );
-  };
-
-  const NavDropdown = ({ label, icon: Icon, isOpen, toggleOpen, children, isActive }) => {
-    const handleClick = () => {
-      if (isCollapsed && !isMobileOpen && setIsCollapsed) {
-        setIsCollapsed(false);
-        if (!isOpen) toggleOpen();
-        return;
-      }
-      toggleOpen();
-    };
-    return (
-      <div className="flex flex-col space-y-1">
-        <button
-          type="button"
-          onClick={handleClick}
-          aria-expanded={isOpen}
-          title={isCollapsed ? label : undefined}
-          className={`group flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-xl text-[13px] transition-all duration-150 w-full ${
-            isActive && !isOpen
-              ? 'bg-white/[0.08] text-white font-bold border border-white/10'
-              : 'text-slate-300 font-medium hover:bg-white/[0.06] hover:text-white'
-          } ${isCollapsed && !isMobileOpen ? 'justify-center px-2.5' : ''}`}
-        >
-          <div className="flex items-center gap-3 truncate">
-            <Icon
-              size={18}
-              aria-hidden="true"
-              className={`shrink-0 transition-colors ${
-                isActive ? 'text-sky-300' : 'text-slate-400 group-hover:text-white'
-              }`}
-            />
-            {(!isCollapsed || isMobileOpen) && <span className="truncate">{label}</span>}
-          </div>
-          {(!isCollapsed || isMobileOpen) && (
-            <ChevronDown
-              size={16}
-              aria-hidden="true"
-              className={`text-slate-400 transition-transform duration-200 shrink-0 ${
-                isOpen ? 'rotate-180 text-white' : ''
-              }`}
-            />
-          )}
-        </button>
-
-        {isOpen && (!isCollapsed || isMobileOpen) && (
-          <div className="pl-3 pr-0.5 flex flex-col space-y-1 mt-1 border-l border-slate-700/80 ml-5 py-0.5">
-            {children}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -203,7 +216,14 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
                 Menu Utama
               </p>
             )}
-            <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard Utama" />
+            <NavItem
+              to="/dashboard"
+              icon={LayoutDashboard}
+              label="Dashboard Utama"
+              active={isActiveRoute('/dashboard')}
+              isCollapsed={isCollapsed}
+              isMobileOpen={isMobileOpen}
+            />
           </div>
 
           <div className="flex flex-col space-y-1">
@@ -217,16 +237,53 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
               icon={Users}
               isOpen={personelOpen}
               toggleOpen={() => setPersonelOpen(!personelOpen)}
+              isCollapsed={isCollapsed}
+              isMobileOpen={isMobileOpen}
+              setIsCollapsed={setIsCollapsed}
               isActive={
                 location.pathname.startsWith('/manage') ||
                 location.pathname.startsWith('/register') ||
                 location.pathname.startsWith('/jam-kerja')
               }
             >
-              <NavItem to="/manage-asn" icon={UserSquare2} label="Data ASN" badge="ASN" />
-              <NavItem to="/manage-non-asn" icon={UserSquare2} label="Data Non-ASN" badge="Non-ASN" />
-              <NavItem to="/jam-kerja" icon={Clock} label="Jam Kerja & Shift" />
-              <NavItem to="/register" icon={UserPlus} label="Pendaftaran Wajah" />
+              <NavItem
+                to="/manage-asn"
+                icon={UserSquare2}
+                label="Data ASN"
+                badge="ASN"
+                nested
+                active={isActiveRoute('/manage-asn')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
+              <NavItem
+                to="/manage-non-asn"
+                icon={UserSquare2}
+                label="Data Non-ASN"
+                badge="Non-ASN"
+                nested
+                active={isActiveRoute('/manage-non-asn')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
+              <NavItem
+                to="/jam-kerja"
+                icon={Clock}
+                label="Jam Kerja & Shift"
+                nested
+                active={isActiveRoute('/jam-kerja')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
+              <NavItem
+                to="/register"
+                icon={UserPlus}
+                label="Pendaftaran Wajah"
+                nested
+                active={isActiveRoute('/register')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
             </NavDropdown>
           </div>
 
@@ -236,7 +293,14 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
                 Dinas Luar
               </p>
             )}
-            <NavItem to="/kegiatan" icon={CalendarDays} label="Jadwal Kegiatan" />
+            <NavItem
+              to="/kegiatan"
+              icon={CalendarDays}
+              label="Jadwal Kegiatan"
+              active={isActiveRoute('/kegiatan')}
+              isCollapsed={isCollapsed}
+              isMobileOpen={isMobileOpen}
+            />
           </div>
 
           <div className="flex flex-col space-y-1">
@@ -250,11 +314,40 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
               icon={ClipboardList}
               isOpen={laporanOpen}
               toggleOpen={() => setLaporanOpen(!laporanOpen)}
+              isCollapsed={isCollapsed}
+              isMobileOpen={isMobileOpen}
+              setIsCollapsed={setIsCollapsed}
               isActive={location.pathname.startsWith('/laporan')}
             >
-              <NavItem to="/laporan/asn" icon={FileText} label="Harian ASN" badge="ASN" />
-              <NavItem to="/laporan/non-asn" icon={FileText} label="Harian Non-ASN" badge="Non-ASN" />
-              <NavItem to="/laporan-kegiatan" icon={FileText} label="Kegiatan Instansi" />
+              <NavItem
+                to="/laporan/asn"
+                icon={FileText}
+                label="Harian ASN"
+                badge="ASN"
+                nested
+                active={isActiveRoute('/laporan/asn')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
+              <NavItem
+                to="/laporan/non-asn"
+                icon={FileText}
+                label="Harian Non-ASN"
+                badge="Non-ASN"
+                nested
+                active={isActiveRoute('/laporan/non-asn')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
+              <NavItem
+                to="/laporan-kegiatan"
+                icon={FileText}
+                label="Kegiatan Instansi"
+                nested
+                active={isActiveRoute('/laporan-kegiatan')}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+              />
             </NavDropdown>
           </div>
 
@@ -270,18 +363,69 @@ const Navbar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen, on
                 icon={Settings}
                 isOpen={sistemOpen}
                 toggleOpen={() => setSistemOpen(!sistemOpen)}
+                isCollapsed={isCollapsed}
+                isMobileOpen={isMobileOpen}
+                setIsCollapsed={setIsCollapsed}
                 isActive={
                   location.pathname.startsWith('/master-data') ||
                   location.pathname === '/settings' ||
                   location.pathname === '/audit-trail'
                 }
               >
-                <NavItem to="/master-data/opd" icon={Building2} label="Master OPD" />
-                <NavItem to="/master-data/devices" icon={MonitorSmartphone} label="Perangkat Kiosk" />
-                <NavItem to="/master-data/admin" icon={UserCog} label="Akun Admin OPD" />
-                <NavItem to="/master-data/spot-sync" icon={RefreshCw} label="Sinkronisasi SPOT" />
-                <NavItem to="/settings" icon={SlidersHorizontal} label="Jam Kiosk & Libur" />
-                <NavItem to="/audit-trail" icon={History} label="Log Audit Sistem" />
+                <NavItem
+                  to="/master-data/opd"
+                  icon={Building2}
+                  label="Master OPD"
+                  nested
+                  active={isActiveRoute('/master-data/opd')}
+                  isCollapsed={isCollapsed}
+                  isMobileOpen={isMobileOpen}
+                />
+                <NavItem
+                  to="/master-data/devices"
+                  icon={MonitorSmartphone}
+                  label="Perangkat Kiosk"
+                  nested
+                  active={isActiveRoute('/master-data/devices')}
+                  isCollapsed={isCollapsed}
+                  isMobileOpen={isMobileOpen}
+                />
+                <NavItem
+                  to="/master-data/admin"
+                  icon={UserCog}
+                  label="Akun Admin OPD"
+                  nested
+                  active={isActiveRoute('/master-data/admin')}
+                  isCollapsed={isCollapsed}
+                  isMobileOpen={isMobileOpen}
+                />
+                <NavItem
+                  to="/master-data/spot-sync"
+                  icon={RefreshCw}
+                  label="Sinkronisasi SPOT"
+                  nested
+                  active={isActiveRoute('/master-data/spot-sync')}
+                  isCollapsed={isCollapsed}
+                  isMobileOpen={isMobileOpen}
+                />
+                <NavItem
+                  to="/settings"
+                  icon={SlidersHorizontal}
+                  label="Jam Kiosk & Libur"
+                  nested
+                  active={isActiveRoute('/settings')}
+                  isCollapsed={isCollapsed}
+                  isMobileOpen={isMobileOpen}
+                />
+                <NavItem
+                  to="/audit-trail"
+                  icon={History}
+                  label="Log Audit Sistem"
+                  nested
+                  active={isActiveRoute('/audit-trail')}
+                  isCollapsed={isCollapsed}
+                  isMobileOpen={isMobileOpen}
+                />
               </NavDropdown>
             </div>
           )}

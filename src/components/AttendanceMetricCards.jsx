@@ -1,7 +1,7 @@
 import { Users, CheckCircle2, Clock, XCircle, CalendarDays } from 'lucide-react';
 import { formatTanggalIndo } from './AttendancePhotoModal';
 
-export const getLocalDateStr = (dateObj = new Date()) => {
+const getLocalDateStr = (dateObj = new Date()) => {
   const yr = dateObj.getFullYear();
   const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
   const da = String(dateObj.getDate()).padStart(2, '0');
@@ -101,7 +101,7 @@ const AttendanceMetricCards = ({
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       {/* Kartu Utama (Anchor): Total Rekap */}
       <button
         type="button"
